@@ -67,19 +67,23 @@ function drawLine(x1, y1, x2, y2)
     const ctx2 = canvas2.getContext("2d");
 
     ctx1.strokeStyle = '#000';
-    ctx1.lineWidth = 2;
+    ctx1.lineWidth = 1;
     ctx1.moveTo(x1, y1);
     ctx1.lineTo(x2, y2);
     ctx1.stroke();
 
     const imData = ctx2.getImageData(0, 0, w, h);
-    const raster = Rasterizer(0, 0, w, h, Rasterizer.setBitmapPixel(imData), Rasterizer.fixedColor(0, 0, 0, 255));
-    raster.drawLine(x1, y1, x2, y2, 2);
+    const r = Rasterizer(
+        w, h,
+        Rasterizer.setRGBATo(imData),
+        Rasterizer.getRGBAFrom(0, 0, 0)
+    );
+    r.drawLine(x1, y1, x2, y2, 1);
     ctx2.putImageData(imData, 0, 0);
 }
 
 drawLine(20, 20, w - 20, h - 20);
-drawLine(-100, 100, -1, 100);
+drawLine(-10, -1, 80, 200);
 })();
 </script>
 </body></html>
