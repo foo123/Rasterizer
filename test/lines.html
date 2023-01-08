@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html><head>
+
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+<title>Rasterizer Lines</title>
+<style type="text/css">
+body {
+    font-size: 16px;
+    font-family: Arial, san-serif;
+}
+#container {
+    position: relative;
+    width: 100%;
+    height: 1000px;
+    padding: 0;
+    margin: 0 auto;
+    overflow: visible;
+}
+.button {
+    position: relative;
+    display: inline-block;
+    padding: 8px 12px;
+    background: white;
+    color: black;
+    border: 1px solid #676767;
+    border-radius: 8px;
+    cursor: pointer;
+    margin: 1px;
+    margin-right: 10px;
+}
+.button:hover {
+    border-width: 2px;
+    margin: 0;
+    margin-right: 9px;
+}
+canvas {
+    position: relative;
+    display: inline-block;
+    width: 200px;
+    height: 200px;
+    margin-right: 10px
+    margin-bottom: 10px;
+}
+h4 {
+    display: block;
+}
+</style>
+</head><body>
+<h1>Rasterizer Lines</h1>
+<div id="container">
+<h4>Test 1:</h4>
+<canvas id="test11" width="200" height="200"></canvas>
+<canvas id="test12" width="200" height="200"></canvas>
+</div>
+<script src="../src/Rasterizer.js"></script>
+<script>
+(function() {
+"use strict";
+const w = 200, h = 200;
+
+function drawLine(x1, y1, x2, y2)
+{
+    const canvas1 = document.getElementById('test11');
+    const canvas2 = document.getElementById('test12');
+    const ctx1 = canvas1.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
+
+    ctx1.strokeStyle = '#000';
+    ctx1.lineWidth = 2;
+    ctx1.moveTo(x1, y1);
+    ctx1.lineTo(x2, y2);
+    ctx1.stroke();
+
+    const imData = ctx2.getImageData(0, 0, w, h);
+    const raster = Rasterizer(0, 0, w, h, Rasterizer.setBitmapPixel(imData), Rasterizer.fixedColor(0, 0, 0, 255));
+    raster.drawLine(x1, y1, x2, y2, 2);
+    ctx2.putImageData(imData, 0, 0);
+}
+
+drawLine(20, 20, w - 20, h - 20);
+drawLine(-100, 100, -1, 100);
+})();
+</script>
+</body></html>
