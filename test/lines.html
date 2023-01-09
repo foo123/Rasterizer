@@ -47,27 +47,31 @@ h4 {
 }
 </style>
 </head><body>
-<h1>Rasterizer Lines</h1>
+<h1>Rasterizer <span id="ver"></span> Lines</h1>
 <div id="container">
 <h4>Test 1:</h4>
 <canvas id="test11" width="200" height="200"></canvas>
 <canvas id="test12" width="200" height="200"></canvas>
 </div>
+<script src="./Gradient.js"></script>
 <script src="../src/Rasterizer.js"></script>
 <script>
 (function() {
 "use strict";
+document.getElementById('ver').textContent = 'v.'+Rasterizer.VERSION;
+
 const w = 200, h = 200;
 
-function drawLine(x1, y1, x2, y2)
+function drawLine(x1, y1, x2, y2, wd)
 {
     const canvas1 = document.getElementById('test11');
     const canvas2 = document.getElementById('test12');
     const ctx1 = canvas1.getContext("2d");
     const ctx2 = canvas2.getContext("2d");
 
+    ctx1.beginPath();
     ctx1.strokeStyle = '#000';
-    ctx1.lineWidth = 1;
+    ctx1.lineWidth = wd;
     ctx1.moveTo(x1, y1);
     ctx1.lineTo(x2, y2);
     ctx1.stroke();
@@ -78,12 +82,45 @@ function drawLine(x1, y1, x2, y2)
         Rasterizer.setRGBATo(imData),
         Rasterizer.getRGBAFrom(0, 0, 0)
     );
-    r.drawLine(x1, y1, x2, y2, 1);
+    r.drawLine(x1, y1, x2, y2, wd);
     ctx2.putImageData(imData, 0, 0);
 }
 
-drawLine(20, 20, w - 20, h - 20);
-drawLine(-10, -1, 80, 200);
+function drawGradientLine(x1, y1, x2, y2, wd, grad1, grad2)
+{
+    const canvas1 = document.getElementById('test11');
+    const canvas2 = document.getElementById('test12');
+    const ctx1 = canvas1.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
+
+    ctx1.beginPath();
+    ctx1.strokeStyle = grad1;
+    ctx1.lineWidth = wd;
+    ctx1.moveTo(x1, y1);
+    ctx1.lineTo(x2, y2);
+    ctx1.stroke();
+
+    const imData = ctx2.getImageData(0, 0, w, h);
+    const r = Rasterizer(
+        w, h,
+        Rasterizer.setRGBATo(imData),
+        Rasterizer.getRGBAFrom(grad2.getColorAt.bind(grad2))
+    );
+    r.drawLine(x1, y1, x2, y2, wd);
+    ctx2.putImageData(imData, 0, 0);
+}
+function addColorStops(gradient)
+{
+    const colors = ['red', 'yellow', 'green', 'blue'];
+    const stops = [0.0, 0.33, 0.66, 1.0];
+    stops.forEach((s, i) => {
+        gradient.addColorStop(s, colors[i]);
+    });
+    return gradient;
+}
+
+drawLine(20, 20, w - 20, h - 20, 3);
+drawGradientLine(-10, -1, 80, 200, 10, addColorStops(document.getElementById('test11').getContext('2d').createLinearGradient(20, 20, w - 20, h - 20)), addColorStops(Gradient.createLinearGradient(20, 20, w - 20, h - 20)));
 })();
 </script>
 </body></html>

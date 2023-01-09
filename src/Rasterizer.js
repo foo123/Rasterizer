@@ -23,7 +23,6 @@ var HAS = Object.prototype.hasOwnProperty, def = Object.defineProperty,
     stdMath = Math, PI = stdMath.PI, TWO_PI = 2*PI, HALF_PI = PI/2, EPS = 1e-6,
     ImArray = 'undefined' !== typeof Uint8ClampedArray ? Uint8ClampedArray : ('undefined' !== typeof Uint8Array ? Uint8Array : Array);
 
-
 function Rasterizer(width, height, set_rgba_at, get_rgba_at)
 {
     var self = this;
@@ -35,6 +34,7 @@ function Rasterizer(width, height, set_rgba_at, get_rgba_at)
         return self;
     };
 }
+Rasterizer.VERSION = '1.0.0';
 Rasterizer.prototype = {
     constructor: Rasterizer,
     drawLine: null
@@ -47,23 +47,59 @@ Rasterizer.createImageData = function(width, height) {
     };
 };
 Rasterizer.getRGBAFrom = function(R, G, B, A) {
-    var r = R, g = G, b = B, a = 3 < arguments.length ? A : 255;
-    return function(x, y) {
-        return [r, g, b, a];
-    };
+    if ((1 === arguments.length) && ('function' === typeof R))
+    {
+        return function(x, y) {
+            var c = R(x, y);
+            return [c[0], c[1], c[2], 3 < c.length ? c[3]/255 : 1.0];
+        };
+    }
+    else
+    {
+        var r = R, g = G, b = B, af = 3 < arguments.length ? A/255 : 1.0;
+        return function(x, y) {
+            return [r, g, b, af];
+        };
+    }
 };
 Rasterizer.setRGBATo = function(imgData) {
-    var width = imgData.width, height = imgData.height;
-    return function(x, y, r, g, b, a) {
-        if (0 <= x && x < width && 0 <= y && y < height)
-        {
-            var index = (x + width*y) << 2;
-            imgData.data[index  ] = r;
-            imgData.data[index+1] = g;
-            imgData.data[index+2] = b;
-            imgData.data[index+3] = a;
-        }
-    };
+    if (('function' === typeof imgData))
+    {
+        return function(x, y, r, g, b, af) {
+            imgData(x, y, r, g, b, clamp(stdMath.round(255*af), 0, 255));
+        };
+    }
+    else
+    {
+        var width = imgData.width, height = imgData.height, bmp = imgData.data;
+        return function(x, y, r, g, b, af) {
+            if (0 <= x && x < width && 0 <= y && y < height)
+            {
+                var index = (x + width*y) << 2,
+                    r0 = bmp[index  ],
+                    g0 = bmp[index+1],
+                    b0 = bmp[index+2],
+                    a0 = bmp[index+3]/255,
+                    a1 = af,
+                    ao = a1 + a0*(1 - a1);
+                // do alpha composition (over operation)
+                if (0 < ao)
+                {
+                    bmp[index  ] = clamp(stdMath.round((r*a1 + r0*a0*(1 - a1))/ao), 0, 255);
+                    bmp[index+1] = clamp(stdMath.round((g*a1 + g0*a0*(1 - a1))/ao), 0, 255);
+                    bmp[index+2] = clamp(stdMath.round((b*a1 + b0*a0*(1 - a1))/ao), 0, 255);
+                    bmp[index+3] = clamp(stdMath.round(255*ao), 0, 255);
+                }
+                else
+                {
+                    bmp[index  ] = r;
+                    bmp[index+1] = g;
+                    bmp[index+2] = b;
+                    bmp[index+3] = 0;
+                }
+            }
+        };
+    }
 };
 
 // utilities
@@ -152,19 +188,18 @@ function draw_line(x0, y0, x1, y1, width, xmin, ymin, xmax, ymax, set_rgba_at, g
 
         var dx = stdMath.abs(x1-x0), dy = stdMath.abs(y1-y0),
             sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1,
-            err = dx-dy, e2, x2, y2, wd = (width >>> 1),
+            err = dx-dy, e2, x2, y2, wd = (width + 1)/2,
             ed = dx+dy === 0 ? 1 : stdMath.sqrt(dx*dx+dy*dy),
-            c, a, ew, s, xx, yy, m = (width & 1);
+            c, a0, a1, ao, ew, s, xx, yy, m = (width & 1);
 
         // drawing loop
         for (;;)
         {
-            if (m)
-            {
-                c = get_rgba_at(x0, y0);
-                a = 1 < wd ? 1 : clamp(stdMath.abs(err-dx+dy)/ed+1-wd, 0, 1);
-                set_rgba_at(x0, y0, c[0], c[1], c[2], clamp(stdMath.round(a*c[3]), 0, 255));
-            }
+            c = get_rgba_at(x0, y0);
+            a0 = c[3]/*/255*/;
+            a1 = clamp(stdMath.abs(err-dx+dy)/ed+1-wd, 0, 1);
+            ao = a1 + a0*(1 - a1);
+            set_rgba_at(x0, y0, c[0], c[1], c[2], ao);
             e2 = err;
             xx = x0;
             yy = y0;
@@ -174,13 +209,12 @@ function draw_line(x0, y0, x1, y1, width, xmin, ymin, xmax, ymax, set_rgba_at, g
                 for (ew = ed*wd, e2 += dy, s = 0, y2 = y0; e2 < ew && (y1 !== y2 || dx > dy); e2 += dx)
                 {
                     s += sy;
-                    a = clamp(stdMath.abs(e2)/ed+1-wd, 0, 1);
-                    y2 = yy - s;
-                    c = get_rgba_at(x0, y2);
-                    set_rgba_at(x0, y2, c[0], c[1], c[2], clamp(stdMath.round(a*c[3]), 0, 255));
                     y2 = yy + s;
                     c = get_rgba_at(x0, y2);
-                    set_rgba_at(x0, y2, c[0], c[1], c[2], clamp(stdMath.round(a*c[3]), 0, 255));
+                    a0 = c[3]/*/255*/;
+                    a1 = clamp(stdMath.abs(e2)/ed+1-wd, 0, 1);
+                    ao = a1 + a0*(1 - a1);
+                    set_rgba_at(x0, y2, c[0], c[1], c[2], ao);
                 }
                 if (x0 === x1) break;
                 e2 = err; err -= dy; x0 += sx;
@@ -190,13 +224,12 @@ function draw_line(x0, y0, x1, y1, width, xmin, ymin, xmax, ymax, set_rgba_at, g
                 for (ew = ed*wd, e2 = dx-e2, s = 0; e2 < ew && (x1 !== x2 || dx < dy); e2 += dy)
                 {
                     s += sx;
-                    a = clamp(stdMath.abs(e2)/ed+1-wd, 0, 1);
-                    x2 = xx - s;
-                    c = get_rgba_at(x2, y0);
-                    set_rgba_at(x2, y0, c[0], c[1], c[2], clamp(stdMath.round(a*c[3]), 0, 255));
                     x2 = xx + s;
                     c = get_rgba_at(x2, y0);
-                    set_rgba_at(x2, y0, c[0], c[1], c[2], clamp(stdMath.round(a*c[3]), 0, 255));
+                    a0 = c[3]/*/255*/;
+                    a1 = clamp(stdMath.abs(e2)/ed+1-wd, 0, 1);
+                    ao = a1 + a0*(1 - a1);
+                    set_rgba_at(x2, y0, c[0], c[1], c[2], ao);
                 }
                 if (y0 === y1) break;
                 err += dx; y0 += sy;
