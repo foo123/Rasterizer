@@ -8,6 +8,7 @@
 body {
     font-size: 16px;
     font-family: Arial, san-serif;
+    background: white;
 }
 #container {
     position: relative;
@@ -62,6 +63,15 @@ document.getElementById('ver').textContent = 'v.'+Rasterizer.VERSION;
 
 const w = 200, h = 200;
 
+function addColorStops(gradient)
+{
+    const colors = ['red', 'yellow', 'green', 'blue'];
+    const stops = [0.0, 0.33, 0.66, 1.0];
+    stops.forEach((s, i) => {
+        gradient.addColorStop(s, colors[i]);
+    });
+    return gradient;
+}
 function drawLine(x1, y1, x2, y2, wd)
 {
     const canvas1 = document.getElementById('test11');
@@ -85,7 +95,6 @@ function drawLine(x1, y1, x2, y2, wd)
     r.drawLine(x1, y1, x2, y2, wd);
     ctx2.putImageData(imData, 0, 0);
 }
-
 function drawGradientLine(x1, y1, x2, y2, wd, grad1, grad2)
 {
     const canvas1 = document.getElementById('test11');
@@ -108,15 +117,6 @@ function drawGradientLine(x1, y1, x2, y2, wd, grad1, grad2)
     );
     r.drawLine(x1, y1, x2, y2, wd);
     ctx2.putImageData(imData, 0, 0);
-}
-function addColorStops(gradient)
-{
-    const colors = ['red', 'yellow', 'green', 'blue'];
-    const stops = [0.0, 0.33, 0.66, 1.0];
-    stops.forEach((s, i) => {
-        gradient.addColorStop(s, colors[i]);
-    });
-    return gradient;
 }
 
 drawLine(20, 20, w - 20, h - 20, 3);

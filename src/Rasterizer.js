@@ -25,12 +25,26 @@ var HAS = Object.prototype.hasOwnProperty, def = Object.defineProperty,
 
 function Rasterizer(width, height, set_rgba_at, get_rgba_at)
 {
-    var self = this;
+    var self = this, set_pixel;
     if (!(self instanceof Rasterizer)) return new Rasterizer(width, height, set_rgba_at, get_rgba_at);
+
+    set_pixel = function set_pixel(x, y, i) {
+        if (0 <= x && x < width && 0 <= y && y < height)
+        {
+            var c = get_rgba_at(x, y),
+                a0 = 3 < c.length ? c[3] : 1.0,
+                a1 = i, ao;
+            if (0 < a0 && 0 < a1)
+            {
+                ao = a0*a1; //a1 + a0*(1.0 - a1);
+                set_rgba_at(stdMath.round(x), stdMath.round(y), c[0], c[1], c[2], ao);
+            }
+        }
+    };
 
     self.drawLine = function(x0, y0, x1, y1, lineWidth) {
         if (null == lineWidth) lineWidth = 1;
-        draw_line(stdMath.round(x0), stdMath.round(y0), stdMath.round(x1), stdMath.round(y1), stdMath.max(0, stdMath.round(lineWidth)), 0, 0, width - 1, height - 1, set_rgba_at, get_rgba_at);
+        draw_line_wu(set_pixel, x0, y0, x1, y1, stdMath.max(0, stdMath.round(lineWidth)), 0, 0, width - 1, height - 1);
         return self;
     };
 }
@@ -92,9 +106,9 @@ Rasterizer.setRGBATo = function(imgData) {
                 }
                 else
                 {
-                    bmp[index  ] = r;
-                    bmp[index+1] = g;
-                    bmp[index+2] = b;
+                    bmp[index  ] = 0;
+                    bmp[index+1] = 0;
+                    bmp[index+2] = 0;
                     bmp[index+3] = 0;
                 }
             }
@@ -168,72 +182,207 @@ function clip(x1, y1, x2, y2, xmin, ymin, xmax, ymax)
 }
 
 // adapted from https://zingl.github.io/bresenham.html
-function draw_line(x0, y0, x1, y1, width, xmin, ymin, xmax, ymax, set_rgba_at, get_rgba_at)
+function draw_line_bresenham(set_pixel, x0, y0, x1, y1, lw, xmin, ymin, xmax, ymax)
 {
     var xm = stdMath.min(x0, x1), xM = stdMath.max(x0, x1),
         ym = stdMath.min(y0, y1), yM = stdMath.max(y0, y1);
+
     // if at least part of line is inside viewport
-    if (xM > xmin && xm < xmax && yM > ymin && ym < ymax)
+    if (!(xM > xmin && xm < xmax && yM > ymin && ym < ymax)) return;
+
+    // clip it to viewport if needed
+    if (xm < xmin || xM > xmax || ym < ymin || yM > ymax)
     {
-        // clip it to viewport if needed
-        if (xm < xmin || xM > xmax || ym < ymin || yM > ymax)
+        var clipped = clip(x0, y0, x1, y1, xmin, ymin, xmax, ymax);
+        if (!clipped) return;
+        x0 = clipped[0];
+        y0 = clipped[1];
+        x1 = clipped[2];
+        y1 = clipped[3];
+    }
+
+    var dx = stdMath.abs(x1 - x0), sx = x0 < x1 ? 1 : -1,
+        dy = stdMath.abs(y1 - y0), sy = y0 < y1 ? 1 : -1,
+        err, e2 = stdMath.sqrt(dx*dx + dy*dy);
+
+    if (0 === e2) return;
+    dx = 255*dx/e2;
+    dy = 255*dy/e2;
+    lw = 255*(lw - 1);
+
+    x0 = stdMath.round(x0);
+    y0 = stdMath.round(y0);
+    x1 = stdMath.round(x1);
+    y1 = stdMath.round(y1);
+
+    if (dx < dy)
+    {
+        x1 = stdMath.round((e2+lw/2)/dy);
+        err = x1*dy-lw/2;
+        for (x0 -= x1*sx; ; y0 += sy)
         {
-            var clipped = clip(x0, y0, x1, y1, xmin, ymin, xmax, ymax);
-            if (!clipped) return;
-            x0 = stdMath.round(clipped[0]);
-            y0 = stdMath.round(clipped[1]);
-            x1 = stdMath.round(clipped[2]);
-            y1 = stdMath.round(clipped[3]);
+            x1 = x0;
+            set_pixel(x1, y0, clamp(err/255, 0, 1));
+            for (e2 = dy-err-lw; e2+dy < 255; e2 += dy)
+            {
+                x1 += sx;
+                set_pixel(x1, y0, 1);
+            }
+            set_pixel(x1 + sx, y0, clamp(e2/255, 0, 1));
+            if (y0 === y1) break;
+            err += dx;
+            if (err > 255)
+            {
+                err -= dy;
+                x0 += sx;
+            }
         }
-
-        var dx = stdMath.abs(x1-x0), dy = stdMath.abs(y1-y0),
-            sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1,
-            err = dx-dy, e2, x2, y2, wd = (width + 1)/2,
-            ed = dx+dy === 0 ? 1 : stdMath.sqrt(dx*dx+dy*dy),
-            c, a0, a1, ao, ew, s, xx, yy, m = (width & 1);
-
-        // drawing loop
-        for (;;)
+    }
+    else
+    {
+        y1 = stdMath.round((e2+lw/2)/dx);
+        err = y1*dx-lw/2;
+        for (y0 -= y1*sy; ; x0 += sx)
         {
-            c = get_rgba_at(x0, y0);
-            a0 = c[3]/*/255*/;
-            a1 = clamp(stdMath.abs(err-dx+dy)/ed+1-wd, 0, 1);
-            ao = a1 + a0*(1 - a1);
-            set_rgba_at(x0, y0, c[0], c[1], c[2], ao);
-            e2 = err;
-            xx = x0;
-            yy = y0;
-            x2 = x0;
-            if (2*e2 >= -dx)
+            y1 = y0;
+            set_pixel(x0, y1, clamp(err/255, 0, 1));
+            for (e2 = dx-err-lw; e2+dx < 255; e2 += dx)
             {
-                for (ew = ed*wd, e2 += dy, s = 0, y2 = y0; e2 < ew && (y1 !== y2 || dx > dy); e2 += dx)
-                {
-                    s += sy;
-                    y2 = yy + s;
-                    c = get_rgba_at(x0, y2);
-                    a0 = c[3]/*/255*/;
-                    a1 = clamp(stdMath.abs(e2)/ed+1-wd, 0, 1);
-                    ao = a1 + a0*(1 - a1);
-                    set_rgba_at(x0, y2, c[0], c[1], c[2], ao);
-                }
-                if (x0 === x1) break;
-                e2 = err; err -= dy; x0 += sx;
+                y1 += sy;
+                set_pixel(x0, y1, 1);
             }
-            if (2*e2 <= dy)
+            set_pixel(x0, y1 + sy, clamp(e2/255, 0, 1));
+            if (x0 === x1) break;
+            err += dy;
+            if (err > 255)
             {
-                for (ew = ed*wd, e2 = dx-e2, s = 0; e2 < ew && (x1 !== x2 || dx < dy); e2 += dy)
-                {
-                    s += sx;
-                    x2 = xx + s;
-                    c = get_rgba_at(x2, y0);
-                    a0 = c[3]/*/255*/;
-                    a1 = clamp(stdMath.abs(e2)/ed+1-wd, 0, 1);
-                    ao = a1 + a0*(1 - a1);
-                    set_rgba_at(x2, y0, c[0], c[1], c[2], ao);
-                }
-                if (y0 === y1) break;
-                err += dx; y0 += sy;
+                err -= dx;
+                y0 += sy;
             }
+        }
+    }
+}
+// adapted from https://github.com/jambolo/thick-xiaolin-wu
+function draw_line_wu(set_pixel, x0, y0, x1, y1, lw, xmin, ymin, xmax, ymax)
+{
+    var xm = stdMath.min(x0, x1), xM = stdMath.max(x0, x1),
+        ym = stdMath.min(y0, y1), yM = stdMath.max(y0, y1);
+
+    // if at least part of line is inside viewport
+    if (!(xM > xmin && xm < xmax && yM > ymin && ym < ymax)) return;
+
+    // clip it to viewport if needed
+    if (xm < xmin || xM > xmax || ym < ymin || yM > ymax)
+    {
+        var clipped = clip(x0, y0, x1, y1, xmin, ymin, xmax, ymax);
+        if (!clipped) return;
+        x0 = clipped[0];
+        y0 = clipped[1];
+        x1 = clipped[2];
+        y1 = clipped[3];
+    }
+
+    var steep = (stdMath.abs(y1 - y0) > stdMath.abs(x1 - x0)), t;
+
+    if (steep)
+    {
+        t = x0;
+        x0 = y0;
+        y0 = t;
+        t = x1;
+        x1 = y1;
+        y1 = t;
+    }
+
+    if (x0 > x1)
+    {
+        t = x0;
+        x0 = x1;
+        x1 = t;
+        t = y0;
+        y0 = y1;
+        y1 = t;
+    }
+
+    var dx = x1 - x0, dy = y1 - y0,
+        gradient = 0 < dx ? dy/dx : 1.0,
+        xend, yend, xgap,
+        xpxl1, ypxl1, xpxl2, ypxl2,
+        fpart, rfpart, intery,
+        x, y, i, j;
+
+    // Rotate lw
+    lw *= stdMath.sqrt(1 + (gradient*gradient));
+
+    // Handle first endpoint
+    xend = stdMath.round(x0);
+    yend = y0 - (lw - 1)*0.5 + gradient*(xend - x0);
+    xgap = 1 - (x0 + 0.5 - xend);
+    xpxl1 = xend;
+    ypxl1 = stdMath.floor(yend);
+    fpart = yend - ypxl1;
+    rfpart = 1 - fpart;
+    if (steep)
+    {
+        set_pixel(ypxl1, xpxl1, rfpart*xgap);
+        for (i=1; i<lw; ++i) set_pixel(ypxl1 + i, xpxl1, 1);
+        set_pixel(ypxl1 + lw, xpxl1, fpart*xgap);
+    }
+    else
+    {
+        set_pixel(xpxl1, ypxl1, rfpart*xgap);
+        for (i=1; i<lw; ++i) set_pixel(xpxl1, ypxl1 + i, 1);
+        set_pixel(xpxl1, ypxl1 + lw, fpart*xgap);
+    }
+
+    intery = yend + gradient;
+
+    // Handle second endpoint
+    xend = stdMath.round(x1);
+    yend = y1 - (lw - 1)*0.5 + gradient*(xend - x1);
+    xgap = 1 - (x1 + 0.5 - xend);
+    xpxl2 = xend;
+    ypxl2 = stdMath.floor(yend);
+    fpart = yend - ypxl2;
+    rfpart = 1 - fpart;
+    if (steep)
+    {
+        set_pixel(ypxl2, xpxl2, rfpart*xgap);
+        for (i=1; i<lw; ++i) set_pixel(ypxl2 + i, xpxl2, 1);
+        set_pixel(ypxl2 + lw, xpxl2, fpart*xgap);
+    }
+    else
+    {
+        set_pixel(xpxl2, ypxl2, rfpart*xgap);
+        for (i=1; i<lw; ++i) set_pixel(xpxl2, ypxl2 + i, 1);
+        set_pixel(xpxl2, ypxl2 + lw, fpart*xgap);
+    }
+
+    // main drawing loop
+    if (steep)
+    {
+        for (j=1,x=j+xpxl1; j<xpxl2; ++j,++x)
+        {
+            fpart = intery - stdMath.floor(intery);
+            rfpart = 1 - fpart;
+            y = stdMath.floor(intery);
+            set_pixel(y, x, rfpart);
+            for (i=1; i<lw; ++i) set_pixel(y + i, x, 1);
+            set_pixel(y + lw, x, fpart);
+            intery += gradient;
+        }
+    }
+    else
+    {
+        for (j=1,x=j+xpxl1; j<xpxl2; ++j,++x)
+        {
+            fpart = intery - stdMath.floor(intery);
+            rfpart = 1 - fpart;
+            y = stdMath.floor(intery);
+            set_pixel(x, y, rfpart);
+            for (i=1; i<lw; ++i) set_pixel(x, y + i, 1);
+            set_pixel(x, y + lw, fpart);
+            intery += gradient;
         }
     }
 }
