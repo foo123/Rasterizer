@@ -2,7 +2,7 @@
 *   Gradient
 *   class to create linear/radial/elliptical/conic gradients as bitmaps even without canvas
 *
-*   @version 1.2.1
+*   @version 1.2.2
 *   https://github.com/foo123/Gradient
 *
 **/
@@ -63,27 +63,32 @@ function Gradient(grad_color_at)
         stops[String(offset)] = [+offset, parseColor(color) || [0,0,0,0]];
     };
     self.getColorAt = function(x, y) {
-        var p = transform.imatrix(true).transform(x, y);
-        return grad_color_at(p.x, p.y, colorStops(), new ImArray(4), 0);
+        var im = transform.imatrix(true),
+            p = im ? im.transform(x, y) : null;
+        return p ? grad_color_at(p.x, p.y, colorStops(), new ImArray(4), 0) : new ImArray(4);
     };
     self.getBitmap = function(width, height) {
         width = stdMath.round(width);
         height = stdMath.round(height);
         var imatrix = transform.imatrix(true),
-            color_stops = colorStops(),
+            color_stops,
             i, x, y, p,
             size = (width*height) << 2,
             bmp = new ImArray(size);
-        for (x=0,y=0,i=0; i<size; i+=4,++x)
+        if (imatrix)
         {
-            if (x >= width) {x=0; ++y;}
-            p = imatrix.transform(x, y);
-            grad_color_at(p.x, p.y, color_stops, bmp, i);
+            color_stops = colorStops();
+            for (x=0,y=0,i=0; i<size; i+=4,++x)
+            {
+                if (x >= width) {x=0; ++y;}
+                p = imatrix.transform(x, y);
+                grad_color_at(p.x, p.y, color_stops, bmp, i);
+            }
         }
         return bmp;
     };
 }
-Gradient.VERSION = "1.2.1";
+Gradient.VERSION = "1.2.2";
 Gradient.prototype = {
     constructor: Gradient,
     transform: null,
@@ -433,6 +438,13 @@ function Transform()
         imatrix = imatrix.mul(Matrix.skewY(s).inv());
         return self;
     };
+    self.transform = function(a, b, c, d, e, f) {
+        var m = new Matrix(a, c, e, b, d, f);
+        matrix = m.mul(matrix);
+        imatrix = imatrix.mul(m.inv());
+        return self;
+    };
+
 }
 Transform.prototype = {
     constructor: Transform,
@@ -448,8 +460,10 @@ Transform.prototype = {
     reflectX: null,
     reflectY: null,
     skewX: null,
-    skewY: null
+    skewY: null,
+    transform: null
 };
+Gradient.Transform = Transform;
 
 // Homogeneous Transformation Matrix
 function Matrix(m00, m01, m02, m10, m11, m12)
@@ -482,14 +496,17 @@ Matrix.prototype = {
     },
     mul: function(other) {
         var self = this;
-        return new Matrix(
-        self.m00*other.m00 + self.m01*other.m10,
-        self.m00*other.m01 + self.m01*other.m11,
-        self.m00*other.m02 + self.m01*other.m12 + self.m02,
-        self.m10*other.m00 + self.m11*other.m10,
-        self.m10*other.m01 + self.m11*other.m11,
-        self.m10*other.m02 + self.m11*other.m12 + self.m12
-        );
+        if (other instanceof Matrix)
+        {
+            return new Matrix(
+            self.m00*other.m00 + self.m01*other.m10,
+            self.m00*other.m01 + self.m01*other.m11,
+            self.m00*other.m02 + self.m01*other.m12 + self.m02,
+            self.m10*other.m00 + self.m11*other.m10,
+            self.m10*other.m01 + self.m11*other.m11,
+            self.m10*other.m02 + self.m11*other.m12 + self.m12
+            );
+        }
     },
     inv: function() {
         var self = this,
@@ -566,6 +583,7 @@ Matrix.skewY = function(s) {
     s || 0, 1, 0
     );
 };
+Gradient.Matrix = Matrix;
 
 // utils
 function is_strictly_equal(a, b)

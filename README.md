@@ -1,5 +1,5 @@
 # Rasterizer
 
-Rasterize and draw anti-aliased lines of arbitrary width (as bitmaps) even without canvas
+Rasterize, draw and fill lines, rectangles and curves. Even without canvas.
 
 **version: 1.0.0** in progress

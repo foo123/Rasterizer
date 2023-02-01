@@ -72,16 +72,19 @@ function addColorStops(gradient)
     });
     return gradient;
 }
-function drawLine(x1, y1, x2, y2, wd)
+function drawLine(x1, y1, x2, y2, lw, ld)
 {
     const canvas1 = document.getElementById('test11');
     const canvas2 = document.getElementById('test12');
     const ctx1 = canvas1.getContext("2d");
     const ctx2 = canvas2.getContext("2d");
 
+    ld = ld || [];
     ctx1.beginPath();
     ctx1.strokeStyle = '#000';
-    ctx1.lineWidth = wd;
+    ctx1.lineCap = 'butt';
+    ctx1.lineWidth = lw;
+    ctx1.setLineDash(ld);
     ctx1.moveTo(x1, y1);
     ctx1.lineTo(x2, y2);
     ctx1.stroke();
@@ -92,19 +95,22 @@ function drawLine(x1, y1, x2, y2, wd)
         Rasterizer.setRGBATo(imData),
         Rasterizer.getRGBAFrom(0, 0, 0)
     );
-    r.drawLine(x1, y1, x2, y2, wd);
+    r.drawLine(x1, y1, x2, y2, lw, ld);
     ctx2.putImageData(imData, 0, 0);
 }
-function drawGradientLine(x1, y1, x2, y2, wd, grad1, grad2)
+function drawGradientLine(x1, y1, x2, y2, lw, ld, grad1, grad2)
 {
     const canvas1 = document.getElementById('test11');
     const canvas2 = document.getElementById('test12');
     const ctx1 = canvas1.getContext("2d");
     const ctx2 = canvas2.getContext("2d");
 
+    ld = ld || [];
     ctx1.beginPath();
     ctx1.strokeStyle = grad1;
-    ctx1.lineWidth = wd;
+    ctx1.lineCap = 'butt';
+    ctx1.lineWidth = lw;
+    ctx1.setLineDash(ld);
     ctx1.moveTo(x1, y1);
     ctx1.lineTo(x2, y2);
     ctx1.stroke();
@@ -115,12 +121,19 @@ function drawGradientLine(x1, y1, x2, y2, wd, grad1, grad2)
         Rasterizer.setRGBATo(imData),
         Rasterizer.getRGBAFrom(grad2.getColorAt.bind(grad2))
     );
-    r.drawLine(x1, y1, x2, y2, wd);
+    r.drawLine(x1, y1, x2, y2, lw, ld);
     ctx2.putImageData(imData, 0, 0);
 }
 
-drawLine(20, 20, w - 20, h - 20, 3);
-drawGradientLine(-10, -1, 80, 200, 10, addColorStops(document.getElementById('test11').getContext('2d').createLinearGradient(20, 20, w - 20, h - 20)), addColorStops(Gradient.createLinearGradient(20, 20, w - 20, h - 20)));
+//drawLine(20, 20, w - 20, 20, 1, [1,1]);
+//drawLine(20, 20, w - 20, h - 20, 1, [10,5]);
+//drawLine(60, 20, 180, 100, 1, []);
+//drawLine(20, 20, 120, 160, 20, []);
+//drawLine(0, 10, 60, 10, 20, []);
+//drawLine(10, 0, 10, 60, 20, []);
+drawLine(20, 20, 80, 100, 20, []);
+//drawLine(60, 10, 180, 100, 20, []);
+//drawGradientLine(-10, -1, 80, 200, 10, [], addColorStops(document.getElementById('test11').getContext('2d').createLinearGradient(20, 20, w - 20, h - 20)), addColorStops(Gradient.createLinearGradient(20, 20, w - 20, h - 20)));
 })();
 </script>
 </body></html>
