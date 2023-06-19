@@ -448,7 +448,7 @@ function wu_thick_line(set_pixel, xs, ys, xe, ye, w)
     if (1 >= w) return wu_line(set_pixel, xs, ys, xe, ye);
 
     // Wu's line algorithm adjusted for thick lines
-    var l, r, dx, dy, n, m, sx, sy, sgn, wx, wy, wx2, wy2, wsx, wsy, wsx2, wsy2;
+    var l, r, dx, dy, n, m, sx, sy, sgn, cos, sin, wx, wy, wx2, wy2, wsx, wsy, wsx2, wsy2;
 
     dx = stdMath.abs(xe - xs);
     dy = stdMath.abs(ye - ys);
@@ -476,8 +476,10 @@ wy  |.   |  .     .
     sy = ys > ye ? -1 : 1;
     n = stdMath.sqrt(dx*dx + dy*dy);
     m = dy/dx;
-    wx2 = (n/dy)*w;
-    wy2 = (n/dx)*w;
+    cos = dx/n;
+    sin = dy/n;
+    wx2 = sin*w;
+    wy2 = cos*w;
     wx = wx2/2;
     wy = wy2/2;
     wsx = sx*wx;
@@ -488,8 +490,8 @@ wy  |.   |  .     .
     if (dy > dx)
     {
         // upper edge
-        l = {dx:wy2*m, dy:wy2, sx:sx, sy:-sy, x:xs - wsx, y:ys + wsy};
-        r = {dx:wy2/m, dy:wy2, sx:-sx, sy:-sy, x:l.x + wsx2, y:l.y};
+        l = {dx:wx2, dy:wy2, sx:sx, sy:-sy, x:xs - wsx, y:ys + wsy};
+        r = {dx:wx2, dy:wy2, sx:-sx, sy:-sy, x:l.x + wsx2, y:l.y};
         sgn = l.x > r.x ? -1 : 1;
         wu_step_init(l); wu_step_init(r);
         for (;;)
@@ -514,8 +516,8 @@ wy  |.   |  .     .
             wu_step(l); wu_step(r);
         }
         // lower edge
-        l = {dx:wy2/m, dy:wy2, sx:sx, sy:sy, x:l.x, y:l.y};
-        r = {dx:wy2*m, dy:wy2, sx:-sx, sy:sy, x:l.x + wsx2, y:l.y};
+        l = {dx:wx2, dy:wy2, sx:sx, sy:sy, x:l.x, y:l.y};
+        r = {dx:wx2, dy:wy2, sx:-sx, sy:sy, x:l.x + wsx2, y:l.y};
         sgn = l.x > r.x ? -1 : 1;
         wu_step_init(l); wu_step_init(r);
         for (;;)
@@ -530,8 +532,8 @@ wy  |.   |  .     .
     else
     {
         // left edge
-        l = {dx:wy2*m, dy:wy2, sx:-sx, sy:sy, x:xs + wsx, y:ys - wsy};
-        r = {dx:wy2/m, dy:wy2, sx:-sx, sy:-sy, x:l.x, y:l.y + wsy2};
+        l = {dx:wx2, dy:wy2, sx:-sx, sy:sy, x:xs + wsx, y:ys - wsy};
+        r = {dx:wx2, dy:wy2, sx:-sx, sy:-sy, x:l.x, y:l.y + wsy2};
         sgn = l.y > r.y ? -1 : 1;
         wu_step_init(l); wu_step_init(r);
         for (;;)
@@ -556,8 +558,8 @@ wy  |.   |  .     .
             wu_step(l); wu_step(r);
         }
         // right edge
-        l = {dx:wy2/m, dy:wy2, sx:sx, sy:sy, x:l.x, y:l.y};
-        r = {dx:wy2*m, dy:wy2, sx:sx, sy:-sy, x:l.x, y:l.y + wsy2};
+        l = {dx:wx2, dy:wy2, sx:sx, sy:sy, x:l.x, y:l.y};
+        r = {dx:wx2, dy:wy2, sx:sx, sy:-sy, x:l.x, y:l.y + wsy2};
         sgn = l.y > r.y ? -1 : 1;
         wu_step_init(l); wu_step_init(r);
         for (;;)
