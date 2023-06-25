@@ -518,8 +518,8 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
     b = {x:xs + wsx, y:ys - wsy};
     c = {x:xe - wsx, y:ye + wsy};
     d = {x:xe + wsx, y:ye - wsy};
-    f = {x:xs - 2*wsy/m + wsx, y:ys + wsy};
-    g = {x:xe + 2*wsy/m - wsx, y:ye - wsy};
+    f = {x:xs + 2*wsy/m + wsx, y:ys + wsy};
+    g = {x:xe - 2*wsy/m - wsx, y:ye - wsy};
 
     if (dy > dx)
     {
