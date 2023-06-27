@@ -35,13 +35,19 @@ body {
     margin: 0;
     margin-right: 9px;
 }
-canvas {
-    position: relative;
+.canvas {
     display: inline-block;
     width: 200px;
     height: 200px;
     margin-right: 10px
     margin-bottom: 10px;
+}
+canvas {
+    position: relative;
+    display: block;
+    width: 200px;
+    height: 200px;
+    margin: 0px
 }
 h4 {
     display: block;
@@ -50,9 +56,13 @@ h4 {
 </head><body>
 <h1>Rasterizer <span id="ver"></span> Lines</h1>
 <div id="container">
-<h4>Test 1:</h4>
-<canvas id="test11" width="200" height="200"></canvas>
-<canvas id="test12" width="200" height="200"></canvas>
+<h4>Thick Lines:</h4>
+<div class="canvas">
+<b>Canvas:</b>
+<canvas id="test11" width="200" height="200"></canvas></div>
+<div class="canvas">
+<b>Rasterizer:</b>
+<canvas id="test12" width="200" height="200"></canvas></div>
 </div>
 <script src="./Gradient.js"></script>
 <script src="../src/Rasterizer.js"></script>
@@ -125,6 +135,32 @@ function drawGradientLine(x1, y1, x2, y2, lw, ld, grad1, grad2)
     ctx2.putImageData(imData, 0, 0);
 }
 
+function drawGradientArc(cx, cy, rx, ry, a, t0, t1, lw, ld, grad1, grad2)
+{
+    const canvas1 = document.getElementById('test11');
+    const canvas2 = document.getElementById('test12');
+    const ctx1 = canvas1.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
+
+    ld = ld || [];
+    ctx1.beginPath();
+    ctx1.strokeStyle = grad1;
+    ctx1.lineCap = 'butt';
+    ctx1.lineWidth = lw;
+    ctx1.setLineDash(ld);
+    ctx1.ellipse(cx, cy, rx, ry, a, t0, t1, false);
+    ctx1.stroke();
+
+    const imData = ctx2.getImageData(0, 0, w, h);
+    const r = Rasterizer(
+        w, h,
+        Rasterizer.setRGBATo(imData),
+        Rasterizer.getRGBAFrom(grad2.getColorAt.bind(grad2))
+    );
+    r.drawArc(cx, cy, rx, ry, a, t0, t1, lw, ld);
+    ctx2.putImageData(imData, 0, 0);
+}
+
 //drawLine(20, 20, w - 20, 20, 1, [1,1]);
 //drawLine(20, 20, w - 20, h - 20, 1, [10,5]);
 //drawLine(60, 20, 180, 100, 1, []);
@@ -133,7 +169,8 @@ function drawGradientLine(x1, y1, x2, y2, lw, ld, grad1, grad2)
 //drawLine(10, 0, 10, 60, 20, []);
 //drawLine(20, 20, 80, 100, 20, []);
 //drawLine(60, 10, 180, 100, 20, []);
-drawGradientLine(20, 20, 80, 100, 20, [], addColorStops(document.getElementById('test11').getContext('2d').createLinearGradient(20, 20, w - 20, h - 20)), addColorStops(Gradient.createLinearGradient(20, 20, w - 20, h - 20)));
+drawGradientLine(20, 20, 120, 80, 20, [], addColorStops(document.getElementById('test11').getContext('2d').createLinearGradient(20, 20, w - 20, h - 20)), addColorStops(Gradient.createLinearGradient(20, 20, w - 20, h - 20)));
+//drawGradientArc(50, 50, 20, 40, 30*Math.PI/180, 0, Math.PI, 2, [], addColorStops(document.getElementById('test11').getContext('2d').createLinearGradient(20, 20, w - 20, h - 20)), addColorStops(Gradient.createLinearGradient(20, 20, w - 20, h - 20)));
 })();
 </script>
 </body></html>
