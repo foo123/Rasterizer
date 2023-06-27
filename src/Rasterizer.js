@@ -62,13 +62,24 @@ function Rasterizer(width, height, set_rgba_at, get_rgba_at)
         }
         return self;
     };
-    self.drawArc = function(cx, cy, rx, ry, angle, start, end, lineWidth, lineDash) {
+    self.drawArc = function(cx, cy, rx, ry, angle, start, end, fs, lineWidth, lineDash) {
         if (null == lineWidth) lineWidth = 1;
         if (0 < lineWidth)
         {
             if (!lineDash) lineDash = EMPTY_ARR;
             if (lineDash.length & 1) lineDash = lineDash.concat(lineDash);
-            draw_arc(set_pixel, cx, cy, rx, ry, angle, start, end, lineWidth, lineDash, 0, 0, width - 1, height - 1);
+            var t0, t1;
+            if (fs)
+            {
+                t0 = -end - PI;
+                t1 = start;
+            }
+            else
+            {
+                t0 = start;
+                t1 = end;
+            }
+            draw_arc(set_pixel, cx, cy, rx, ry, angle, t0, t1, lineWidth, lineDash, 0, 0, width - 1, height - 1);
         }
         return self;
     };
@@ -232,14 +243,14 @@ function draw_arc(set_pixel, cx, cy, rx, ry, a, t0, t1, lw, ld, xmin, ymin, xmax
         cos = stdMath.cos(a),
         sin = stdMath.sin(a),
         points = sample_curve(function(t) {
-                var p = t0 + t*(t1 - t0),
-                    x = rx*stdMath.cos(p),
-                    y = ry*stdMath.sin(p);
-                return {
-                    x: cx + cos*x - sin*y,
-                    y: cy + sin*x + cos*y
-                };
-        }, NUM_POINTS, PIXEL_SIZE, true, true);
+            var p = t0 + t*(t1 - t0),
+                x = rx*stdMath.cos(p),
+                y = ry*stdMath.sin(p);
+            return {
+                x: cx + cos*x - sin*y,
+                y: cy + sin*x + cos*y
+            };
+        }, NUM_POINTS, PIXEL_SIZE, true, false);
     for (i=0,n=points.length-1; i<n; ++i)
     {
         p = points[i];
@@ -381,6 +392,21 @@ function fill_rect(set_pixel, x1, y1, x2, y2)
         }
     }
 }
+function fill_arc(set_pixel, cx, cy, rx, ry, a, t0, t1)
+{
+    var n, i, p, q,
+        cos = stdMath.cos(a),
+        sin = stdMath.sin(a),
+        points = sample_curve(function(t) {
+            var p = t0 + t*(t1 - t0),
+                x = rx*stdMath.cos(p),
+                y = ry*stdMath.sin(p);
+            return {
+                x: cx + cos*x - sin*y,
+                y: cy + sin*x + cos*y
+            };
+        }, NUM_POINTS, PIXEL_SIZE, true, false);
+}
 function wu_step_init(p)
 {
     // initialize the step used in Wu's algorithm
@@ -508,7 +534,7 @@ function wu_line(set_pixel, xs, ys, xe, ye)
         }
     }
 }
-function wu_thick_line(set_pixel, xs, ys, xe, ye, w)
+function wu_thick_line(set_pixel, xs, ys, xe, ye, w, cap)
 {
     if (1 >= w) return wu_line(set_pixel, xs, ys, xe, ye);
 
@@ -524,11 +550,13 @@ function wu_thick_line(set_pixel, xs, ys, xe, ye, w)
 
     if (0 === dx)
     {
-        return fill_rect(set_pixel, stdMath.round(xs - w/2), stdMath.round(ys), stdMath.round(xe + w/2), stdMath.round(ye));
+        fill_rect(set_pixel, stdMath.round(xs - w/2), stdMath.round(ys), stdMath.round(xe + w/2), stdMath.round(ye));
+        return;
     }
     if (0 === dy)
     {
-        return fill_rect(set_pixel, stdMath.round(xs), stdMath.round(ys - w/2), stdMath.round(xe), stdMath.round(ye + w/2));
+        fill_rect(set_pixel, stdMath.round(xs), stdMath.round(ys - w/2), stdMath.round(xe), stdMath.round(ye + w/2));
+        return;
     }
 
     if (xs > xe)
@@ -590,7 +618,7 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
     // fill
     if (dy > dx)
     {
-        for (ys=stdMath.round(b.y)+1,ye=stdMath.round(a.y); sy*(ye-ys)>0; ys+=sy)
+        for (ys=stdMath.round(b.y)+sy,ye=stdMath.round(a.y); sy*(ye-ys)>0; ys+=sy)
         {
             xx = intercept_x(ys, im, b, -m, b);
             if (0 < xx[1] - xx[0])
