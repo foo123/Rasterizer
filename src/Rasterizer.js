@@ -327,6 +327,22 @@ function fill_rect(set_pixel, x1, y1, x2, y2)
     }
 }
 
+function intercept_x(y, p1, p2, p3, p4)
+{
+    var m12 = -(p2.y - p1.y)/(p2.x - p1.x),
+        m34 = -(p4.y - p3.y)/(p4.x - p3.x),
+        x12 = (p1.y - y)/m12 + p1.x,
+        x34 = (p3.y - y)/m34 + p3.x;
+    return x12 > x34 ? [x34, x12] : [x12, x34];
+}
+function intercept_y(x, p1, p2, p3, p4)
+{
+    var m12 = -(p2.y - p1.y)/(p2.x - p1.x),
+        m34 = -(p4.y - p3.y)/(p4.x - p3.x),
+        y12 = p1.y - m12*(x - p1.x),
+        y34 = p3.y - m34*(x - p3.x);
+    return y12 > y34 ? [y34, y12] : [y12, y34];
+}
 function wu_step_init(p)
 {
     // initialize the step used in Wu's algorithm
@@ -437,7 +453,7 @@ function wu_line(set_pixel, xs, ys, xe, ye)
         for (;;)
         {
             if (0 < p.rfpart) set_pixel(p.x, p.y, p.rfpart);
-            if (0 < p.fpart) set_pixel(p.x + p.sx, p.y, p.fpart);
+            if (0 < p.fpart) set_pixel(p.x + 1, p.y, p.fpart);
             if (p.end()) return;
             wu_step(p);
         }
@@ -447,7 +463,7 @@ function wu_line(set_pixel, xs, ys, xe, ye)
         for (;;)
         {
             if (0 < p.rfpart) set_pixel(p.x, p.y, p.rfpart);
-            if (0 < p.fpart) set_pixel(p.x, p.y + p.sy, p.fpart);
+            if (0 < p.fpart) set_pixel(p.x, p.y + 1, p.fpart);
             if (p.end()) return;
             wu_step(p);
         }
@@ -463,10 +479,12 @@ function wu_thick_line(set_pixel, xs, ys, xe, ye, w)
         dx, dy, n, m,
         sx, sy, cos, sin,
         wx, wy, wsx, wsy,
-        a, b, c, d, g, f;
+        a, b, c, d, g, f,
+        xx, yy;
 
     dx = stdMath.abs(xe - xs);
     dy = stdMath.abs(ye - ys);
+    w -= 1;
 
     if (0 === dx)
     {
@@ -523,108 +541,39 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
 
     if (dy > dx)
     {
-        // upper edge
-        // a -> b
-        l = {x:a.x, y:a.y, endx:b.x, endy:b.y};
-        // f -> b
-        r = {x:f.x, y:f.y, endx:b.x, endy:b.y};
-        if (l.x > r.x)
+        // fill
+        for (ys=stdMath.round(b.y)+1,ye=stdMath.round(a.y); ys<ye; ++ys)
         {
-            t = l;
-            l = r;
-            r = t;
+            xx = intercept_x(ys, b, a, b, f);
+            if (1 < xx[1] - xx[0])
+            {
+                fill_rect(set_pixel, stdMath.round(xx[0] + 0.5), ys, stdMath.round(xx[1] - 0.5), ys);
+            }
         }
-        wu_step_init(l); wu_step_init(r);
-        for (;;)
+        for (ys=ye,ye=stdMath.round(g.y); ys<ye; ++ys)
         {
-            if (0 > (r.x - l.x) || l.end()) break;
-            if (0 < l.rfpart) set_pixel(l.x, l.y, l.rfpart);
-            if (1 < (r.x - l.x)) fill_rect(set_pixel, l.x + 1, l.y, r.x - 1, r.y);
-            if (0 < r.fpart) set_pixel(r.x, r.y, r.fpart);
-            wu_step(l); wu_step(r);
+            xx = intercept_x(ys, a, g, f, d);
+            if (1 < xx[1] - xx[0])
+            {
+                fill_rect(set_pixel, stdMath.round(xx[0] + 0.5), ys, stdMath.round(xx[1] - 0.5), ys);
+            }
         }
-        // main line body
-        // a -> g
-        l = {x:a.x, y:a.y, endx:g.x, endy:g.y};
-        // f -> d
-        r = {x:f.x, y:f.y, endx:d.x, endy:d.y};
-        if (l.x > r.x)
+        for (ys=ye,ye=stdMath.round(c.y); ys<ye; ++ys)
         {
-            t = l;
-            l = r;
-            r = t;
+            xx = intercept_x(ys, g, c, c, d);
+            if (1 < xx[1] - xx[0])
+            {
+                fill_rect(set_pixel, stdMath.round(xx[0] + 0.5), ys, stdMath.round(xx[1] - 0.5), ys);
+            }
         }
-        wu_step_init(l); wu_step_init(r);
-        for (;;)
-        {
-            if (0 < l.rfpart) set_pixel(l.x, l.y, l.rfpart);
-            if (1 < (r.x - l.x)) fill_rect(set_pixel, l.x + 1, l.y, r.x - 1, l.y);
-            if (0 < r.fpart) set_pixel(r.x, l.y, r.fpart);
-            if (l.end()) break;
-            wu_step(l); wu_step(r);
-        }
-        // lower edge
-        // g -> c
-        l = {x:g.x, y:g.y, endx:c.x, endy:c.y};
-        // d -> c
-        r = {x:d.x, y:d.y, endx:c.x, endy:c.y};
-        if (l.x > r.x)
-        {
-            t = l;
-            l = r;
-            r = t;
-        }
-        wu_step_init(l); wu_step_init(r);
-        for (;;)
-        {
-            if (0 > (r.x - l.x) || l.end()) break;
-            if (0 < l.rfpart) set_pixel(l.x, l.y, l.rfpart);
-            if (1 < (r.x - l.x)) fill_rect(set_pixel, l.x + 1, l.y, r.x - 1, r.y);
-            if (0 < r.fpart) set_pixel(r.x, r.y, r.fpart);
-            wu_step(l); wu_step(r);
-        }
+        // outline
+        wu_line(set_pixel, a.x, a.y, b.x, b.y);
+        wu_line(set_pixel, b.x, b.y, d.x, d.y);
+        wu_line(set_pixel, d.x, d.y, c.x, c.y);
+        wu_line(set_pixel, c.x, c.y, a.x, a.y);
     }
     else
     {
-        // left edge
-        l = {dx:wx2, dy:wy2, sx:-sx, sy:sy, x:xs + wsx, y:ys - wsy};
-        r = {dx:wx2, dy:wy2, sx:-sx, sy:-sy, x:l.x, y:l.y + wsy2};
-        sgn = l.y > r.y ? -1 : 1;
-        wu_step_init(l); wu_step_init(r);
-        for (;;)
-        {
-            if (0 < l.rfpart) set_pixel(l.x, l.y, l.rfpart);
-            if (1 < sgn*(r.y - l.y)) fill_rect(set_pixel, l.x, l.y + sy, r.x, r.y - sy);
-            if (0 < r.fpart) set_pixel(r.x, r.y, r.fpart);
-            if (0 > sgn*(r.y - l.y) || l.end()) break;
-            wu_step(l); wu_step(r);
-        }
-        // main line body
-        l = {dx:dx, dy:dy, sx:sx, sy:sy, x:xs + wsx, y:ys - wsy};
-        r = {dx:dx, dy:dy, sx:sx, sy:sy, x:l.x, y:l.y + wsy2};
-        sgn = l.y > r.y ? -1 : 1;
-        wu_step_init(l); wu_step_init(r);
-        for (;;)
-        {
-            if (0 < l.rfpart) set_pixel(l.x, l.y, l.rfpart);
-            if (1 < sgn*(r.y - l.y)) fill_rect(set_pixel, l.x, l.y + sy, r.x, r.y - sy);
-            if (0 < r.fpart) set_pixel(r.x, r.y, r.fpart);
-            if (stdMath.abs(l.x + wsx - xe) < 1 || l.end()) break;
-            wu_step(l); wu_step(r);
-        }
-        // right edge
-        l = {dx:wx2, dy:wy2, sx:sx, sy:sy, x:l.x, y:l.y};
-        r = {dx:wx2, dy:wy2, sx:sx, sy:-sy, x:l.x, y:l.y + wsy2};
-        sgn = l.y > r.y ? -1 : 1;
-        wu_step_init(l); wu_step_init(r);
-        for (;;)
-        {
-            if (0 < l.rfpart) set_pixel(l.x, l.y, l.rfpart);
-            if (1 < sgn*(r.y - l.y)) fill_rect(set_pixel, l.x, l.y + sy, r.x, r.y - sy);
-            if (0 < r.fpart) set_pixel(r.x, r.y, r.fpart);
-            if (0 > sgn*(r.y - l.y) || l.end()) break;
-            wu_step(l); wu_step(r);
-        }
     }
 }
 
