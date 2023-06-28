@@ -25,17 +25,24 @@ var HAS = Object.prototype.hasOwnProperty,
     EPS = 1e-6, sqrt2 = stdMath.sqrt(2),
     NUM_POINTS = 20, PIXEL_SIZE = 1,
     PI = stdMath.PI, EMPTY_ARR = [],
+    NOOP = function() {},
     ImArray = 'undefined' !== typeof Uint8ClampedArray ? Uint8ClampedArray : ('undefined' !== typeof Uint8Array ? Uint8Array : Array);
 
-function Rasterizer(width, height, set_rgba_at, get_rgba_at)
+function Rasterizer(width, height, set_rgba_at)
 {
-    var self = this, set_pixel;
-    if (!(self instanceof Rasterizer)) return new Rasterizer(width, height, set_rgba_at, get_rgba_at);
+    var self = this;
+    if (!(self instanceof Rasterizer)) return new Rasterizer(width, height, set_rgba_at);
 
-    set_pixel = function set_pixel(x, y, i) {
+    var get_stroke_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]),
+        get_fill_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]),
+        stroke_pixel, fill_pixel,
+        lineCap = 'butt', lineJoin = 'miter',
+        lineWidth = 1, lineDash = [];
+
+    stroke_pixel = function stroke_pixel(x, y, i) {
         if (0 <= x && x < width && 0 <= y && y < height && 0 < i)
         {
-            var c = get_rgba_at(x, y),
+            var c = get_stroke_at(x, y),
                 a0 = 3 < c.length ? c[3] : 1.0,
                 a1 = i, ao;
             if (0 < a0)
@@ -45,31 +52,123 @@ function Rasterizer(width, height, set_rgba_at, get_rgba_at)
             }
         }
     };
+    fill_pixel = function fill_pixel(x, y, i) {
+        if (0 <= x && x < width && 0 <= y && y < height && 0 < i)
+        {
+            var c = get_fill_at(x, y),
+                a0 = 3 < c.length ? c[3] : 1.0,
+                a1 = i, ao;
+            if (0 < a0)
+            {
+                ao = a0*a1; //a1 + a0*(1.0 - a1);
+                set_rgba_at(x, y, c[0], c[1], c[2], ao);
+            }
+        }
+    };
+
+    def(self, 'strokeStyle', {
+        get: function() {
+            return '';
+        },
+        set: function(c) {
+           get_stroke_at = Rasterizer.getRGBAFrom(c);
+        }
+    });
+
+    def(self, 'fillStyle', {
+        get: function() {
+            return '';
+        },
+        set: function(c) {
+           get_fill_at = Rasterizer.getRGBAFrom(c);
+        }
+    });
+
+    def(self, 'lineWidth', {
+        get: function() {
+            return lineWidth;
+        },
+        set: function(lw) {
+            lineWidth = stdMath.abs((+lw) || 0);
+        }
+    });
+
+    def(self, 'lineCap', {
+        get: function() {
+            return lineCap;
+        },
+        set: function(lc) {
+            lc = String(lc).toLowerCase();
+            if (-1 !== ['butt', 'square'].indexOf(lc))
+            {
+                // only 'butt' and 'square' lineCap supported
+                lineCap = lc;
+            }
+        }
+    });
+
+    def(self, 'lineJoin', {
+        get: function() {
+            return lineJoin;
+        },
+        set: function(lj) {
+            lj = String(lj).toLowerCase();
+            if (-1 !== ['miter','bevel'].indexOf(lj))
+            {
+                // only 'miter' and 'bevel' lineJoin supported
+                lineJoin = lj;
+            }
+        }
+    });
+
+    def(self, 'lineDash', {
+        get: function() {
+            return lineDash.slice();
+        },
+        set: function(ld) {
+            ld = [].concat(ld);
+            if (ld.length & 1) ld = ld.concat(ld);
+            lineDash = ld;
+        }
+    });
+    self.setLineDash = function(ld) {
+        self.lineDash = ld;
+    };
+
+    self.strokeRect = function(x, y, w, h) {
+        if (1 <= w && 1 <= h && 0 < lineWidth)
+        {
+            draw_line(stroke_pixel, x, y, x + w - 1, y, lineWidth, lineDash, 'butt', 'miter', 0, 0, width - 1, height - 1);
+            draw_line(stroke_pixel, x + w - 1, y, x + w - 1, y + h - 1, lineWidth, lineDash, 'butt', 'miter', 0, 0, width - 1, height - 1);
+            draw_line(stroke_pixel, x + w - 1, y + h - 1, x, y + h - 1, lineWidth, lineDash, 'butt', 'miter', 0, 0, width - 1, height - 1);
+            draw_line(stroke_pixel, x, y + h - 1, x, y, lineWidth, lineDash, 'butt', 'miter', 0, 0, width - 1, height - 1);
+        }
+        return self;
+    };
     self.fillRect = function(x, y, w, h) {
         if (1 <= w && 1 <= h)
         {
-            fill_rectangular(set_pixel, x, y, x + w - 1, y + h - 1, 0, 0, width - 1, height - 1);
+            fill_rectangular(fill_pixel, x, y, x + w - 1, y + h - 1, 0, 0, width - 1, height - 1);
         }
         return self;
     };
-    self.drawLine = function(x1, y1, x2, y2, lineWidth, lineDash, lineCap) {
-        if (null == lineWidth) lineWidth = 1;
+    self.drawLine = function(x1, y1, x2, y2) {
         if (0 < lineWidth)
         {
-            if (!lineCap) lineCap = 'butt';
-            if (!lineDash) lineDash = EMPTY_ARR;
-            if (lineDash.length & 1) lineDash = lineDash.concat(lineDash);
-            draw_line(set_pixel, x1, y1, x2, y2, lineWidth, lineDash, lineCap, 0, 0, width - 1, height - 1);
+            draw_line(stroke_pixel, x1, y1, x2, y2, lineWidth, lineDash, lineCap, lineJoin, 0, 0, width - 1, height - 1);
         }
         return self;
     };
-    self.drawArc = function(cx, cy, rx, ry, angle, start, end, fs, lineWidth, lineDash, lineCap) {
-        if (null == lineWidth) lineWidth = 1;
+    self.joinLines = function(x1, y1, x2, y2, x3, y3) {
         if (0 < lineWidth)
         {
-            if (!lineCap) lineCap = 'butt';
-            if (!lineDash) lineDash = EMPTY_ARR;
-            if (lineDash.length & 1) lineDash = lineDash.concat(lineDash);
+            join_lines(stroke_pixel, x1, y1, x2, y2, x3, y3, lineWidth, lineJoin);
+        }
+        return self;
+    };
+    self.drawArc = function(cx, cy, rx, ry, angle, start, end, fs) {
+        if (0 < lineWidth)
+        {
             var t0, t1;
             if (fs)
             {
@@ -81,24 +180,20 @@ function Rasterizer(width, height, set_rgba_at, get_rgba_at)
                 t0 = start;
                 t1 = end;
             }
-            draw_arc(set_pixel, cx, cy, rx, ry, angle, t0, t1, lineWidth, lineDash, lineCap, 0, 0, width - 1, height - 1);
+            draw_arc(stroke_pixel, cx, cy, rx, ry, angle, t0, t1, lineWidth, lineDash, lineCap, lineJoin, 0, 0, width - 1, height - 1);
         }
         return self;
     };
-    self.drawBezier = function(controls, lineWidth, lineDash, lineCap) {
-        if (null == lineWidth) lineWidth = 1;
+    self.drawBezier = function(controls) {
         if (0 < lineWidth && 2 <= controls.length)
         {
-            if (!lineCap) lineCap = 'butt';
-            if (!lineDash) lineDash = EMPTY_ARR;
-            if (lineDash.length & 1) lineDash = lineDash.concat(lineDash);
             if (2 === controls.length)
             {
-                draw_line(set_pixel, controls[0].x, controls[0].y, controls[1].x, controls[1].y, lineWidth, lineDash, lineCap, 0, 0, width - 1, height - 1);
+                draw_line(stroke_pixel, controls[0].x, controls[0].y, controls[1].x, controls[1].y, lineWidth, lineDash, lineCap, lineJoin, 0, 0, width - 1, height - 1);
             }
             else
             {
-                draw_bezier(set_pixel, controls, lineWidth, lineDash, lineCap, 0, 0, width - 1, height - 1);
+                draw_bezier(stroke_pixel, controls, lineWidth, lineDash, lineCap, lineJoin, 0, 0, width - 1, height - 1);
             }
         }
         return self;
@@ -107,6 +202,13 @@ function Rasterizer(width, height, set_rgba_at, get_rgba_at)
 Rasterizer.VERSION = '1.0.0';
 Rasterizer.prototype = {
     constructor: Rasterizer,
+    strokeStyle: null,
+    fillStyle: null,
+    lineWidth: null,
+    lineCap: null,
+    lineJoin: null,
+    setLineDash: null,
+    strokeRect: null,
     fillRect: null,
     drawLine: null,
     drawArc: null,
@@ -119,17 +221,17 @@ Rasterizer.createImageData = function(width, height) {
         height: height
     };
 };
-Rasterizer.getRGBAFrom = function(R, G, B, A) {
-    if ((1 === arguments.length) && ('function' === typeof R))
+Rasterizer.getRGBAFrom = function(RGBA) {
+    if ('function' === typeof RGBA)
     {
         return function(x, y) {
-            var c = R(x, y);
+            var c = RGBA(x, y);
             return [c[0], c[1], c[2], 3 < c.length ? c[3]/255 : 1.0];
         };
     }
     else
     {
-        var c = [R, G, B, 3 < arguments.length ? A/255 : 1.0];
+        var c = [RGBA[0], RGBA[1], RGBA[2], 3 < RGBA.length ? RGBA[3]/255 : 1.0];
         return function(x, y) {
             return c;
         };
@@ -187,10 +289,8 @@ function fill_rectangular(set_pixel, x1, y1, x2, y2, xmin, ymin, xmax, ymax)
     fill_rect(set_pixel, stdMath.round(xm), stdMath.round(ym), stdMath.round(xM), stdMath.round(yM));
 }
 
-function draw_line(set_pixel, x1, y1, x2, y2, lw, ld, lc, xmin, ymin, xmax, ymax)
+function draw_line(set_pixel, x1, y1, x2, y2, lw, ld, lc, lj, xmin, ymin, xmax, ymax)
 {
-    if (0 >= lw) return; // if no width return
-
     var xm = stdMath.min(x1, x2), xM = stdMath.max(x1, x2),
         ym = stdMath.min(y1, y2), yM = stdMath.max(y1, y2);
 
@@ -243,7 +343,6 @@ function draw_line(set_pixel, x1, y1, x2, y2, lw, ld, lc, xmin, ymin, xmax, ymax
     {
         s = stdMath.abs(dx)/hypot(dx, dy);
         r = dy/dx;
-        //n = stdMath.abs(dx)*stdMath.sqrt(1 + r*r);
         dk = stdMath.min(stdMath.abs(x2 - x1), dl ? s*ld[k] : INF);
         for (;;)
         {
@@ -259,7 +358,7 @@ function draw_line(set_pixel, x1, y1, x2, y2, lw, ld, lc, xmin, ymin, xmax, ymax
         }
     }
 }
-function draw_arc(set_pixel, cx, cy, rx, ry, a, t0, t1, lw, ld, lc, xmin, ymin, xmax, ymax)
+function draw_arc(set_pixel, cx, cy, rx, ry, a, t0, t1, lw, ld, lc, lj, xmin, ymin, xmax, ymax)
 {
     var n, i, p, q,
         cos = stdMath.cos(a),
@@ -278,10 +377,10 @@ function draw_arc(set_pixel, cx, cy, rx, ry, a, t0, t1, lw, ld, lc, xmin, ymin, 
     {
         p = points[i];
         q = points[i+1];
-        draw_line(set_pixel, p.x, p.y, q.x, q.y, lw, ld, lc, xmin, ymin, xmax, ymax);
+        draw_line(set_pixel, p.x, p.y, q.x, q.y, lw, ld, lc, lj, xmin, ymin, xmax, ymax);
     }
 }
-function draw_bezier(set_pixel, c, lw, ld, lc, xmin, ymin, xmax, ymax)
+function draw_bezier(set_pixel, c, lw, ld, lc, lj, xmin, ymin, xmax, ymax)
 {
     var n, i, p, q,
         bezier2 = function(t) {
@@ -306,7 +405,7 @@ function draw_bezier(set_pixel, c, lw, ld, lc, xmin, ymin, xmax, ymax)
     {
         p = points[i];
         q = points[i+1];
-        draw_line(set_pixel, p.x, p.y, q.x, q.y, lw, ld, lc, xmin, ymin, xmax, ymax);
+        draw_line(set_pixel, p.x, p.y, q.x, q.y, lw, ld, lc, lj, xmin, ymin, xmax, ymax);
     }
 }
 
@@ -386,21 +485,33 @@ function clip(x1, y1, x2, y2, xmin, ymin, xmax, ymax)
     x1 + p2*rn2, y1 + p4*rn2
     ];
 }
-function intercept_x(y, m, p1/*, p2*/, n, q1/*, q2*/)
+function intersect_x(y, m, p1/*, p2*/, n, q1/*, q2*/)
 {
     var //m = -(p2.y - p1.y)/(p2.x - p1.x),
         //n = -(q2.y - q1.y)/(q2.x - q1.x),
-        xm = (p1.y - y)/m + p1.x,
-        xn = (q1.y - y)/n + q1.x;
+        xm, xn;
+    xm = (p1.y - y)/m + p1.x;
+    if (null == n) return xm;
+    xn = (q1.y - y)/n + q1.x;
     return xm > xn ? [xn, xm] : [xm, xn];
 }
-function intercept_y(x, m, p1/*, p2*/, n, q1/*, q2*/)
+function intersect_y(x, m, p1/*, p2*/, n, q1/*, q2*/)
 {
     var //m = -(p2.y - p1.y)/(p2.x - p1.x),
         //n = -(q2.y - q1.y)/(q2.x - q1.x),
-        ym = p1.y - m*(x - p1.x),
-        yn = q1.y - n*(x - q1.x);
+        ym, yn;
+    ym = p1.y - m*(x - p1.x);
+    if (null == n) return ym;
+    yn = q1.y - n*(x - q1.x);
     return ym > yn ? [yn, ym] : [ym, yn];
+}
+function intersect(p1, p2, q1, q2)
+{
+    var a = p2.y - p1.y, b = p1.x - p2.x, c = p2.x*p1.y - p1.x*p2.y,
+        k = q2.y - q1.y, l = q1.x - q2.x, m = q2.x*q1.y - q1.x*q2.y,
+        D = a*l - b*k;
+    // zero, infinite or one point
+    return is_strictly_equal(D, 0) ? false : {x:(b*m - c*l)/D, y:(c*k - a*m)/D};
 }
 function fill_rect(set_pixel, x1, y1, x2, y2)
 {
@@ -442,21 +553,6 @@ function fill_rect(set_pixel, x1, y1, x2, y2)
             }
         }
     }
-}
-function fill_arc(set_pixel, cx, cy, rx, ry, a, t0, t1)
-{
-    var n, i, p, q,
-        cos = stdMath.cos(a),
-        sin = stdMath.sin(a),
-        points = sample_curve(function(t) {
-            var p = t0 + t*(t1 - t0),
-                x = rx*stdMath.cos(p),
-                y = ry*stdMath.sin(p);
-            return {
-                x: cx + cos*x - sin*y,
-                y: cy + sin*x + cos*y
-            };
-        }, NUM_POINTS, PIXEL_SIZE, true);
 }
 function wu_step_init(p)
 {
@@ -680,7 +776,7 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
     {
         for (ys=stdMath.round(b.y)+sy,ye=stdMath.round(a.y); sy*(ye-ys)>0; ys+=sy)
         {
-            xx = intercept_x(ys, im, b, -m, b);
+            xx = intersect_x(ys, im, b, -m, b);
             if (0 < xx[1] - xx[0])
             {
                 fill_rect(set_pixel, stdMath.round(xx[0] + e), ys, stdMath.round(xx[1] - e), ys);
@@ -688,7 +784,7 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
         }
         for (ys=ye,ye=stdMath.round(g.y); sy*(ye-ys)>0; ys+=sy)
         {
-            xx = intercept_x(ys, -m, c, -m, b);
+            xx = intersect_x(ys, -m, c, -m, b);
             if (0 < xx[1] - xx[0])
             {
                 fill_rect(set_pixel, stdMath.round(xx[0] + e), ys, stdMath.round(xx[1] - e), ys);
@@ -696,7 +792,7 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
         }
         for (ys=ye,ye=stdMath.round(c.y); sy*(ye-ys)>0; ys+=sy)
         {
-            xx = intercept_x(ys, -m, c, im, c);
+            xx = intersect_x(ys, -m, c, im, c);
             if (0 < xx[1] - xx[0])
             {
                 fill_rect(set_pixel, stdMath.round(xx[0] + e), ys, stdMath.round(xx[1] - e), ys);
@@ -707,7 +803,7 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
     {
         for (xs=stdMath.round(a.x)+1,xe=stdMath.round(b.x); xs<xe; ++xs)
         {
-            yy = intercept_y(xs, im, a, -m, a);
+            yy = intersect_y(xs, im, a, -m, a);
             if (0 < yy[1] - yy[0])
             {
                 fill_rect(set_pixel, xs, stdMath.round(yy[0] + e), xs, stdMath.round(yy[1] - e));
@@ -715,7 +811,7 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
         }
         for (xs=xe,xe=stdMath.round(c.x); xs<xe; ++xs)
         {
-            yy = intercept_y(xs, -m, a, -m, d);
+            yy = intersect_y(xs, -m, a, -m, d);
             if (0 < yy[1] - yy[0])
             {
                 fill_rect(set_pixel, xs, stdMath.round(yy[0] + e), xs, stdMath.round(yy[1] - e));
@@ -723,11 +819,112 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
         }
         for (xs=xe,xe=stdMath.round(d.x); xs<xe; ++xs)
         {
-            yy = intercept_y(xs, im, d, -m, d);
+            yy = intersect_y(xs, im, d, -m, d);
             if (0 < yy[1] - yy[0])
             {
                 fill_rect(set_pixel, xs, stdMath.round(yy[0] + e), xs, stdMath.round(yy[1] - e));
             }
+        }
+    }
+}
+function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, w, j)
+{
+    var dx1 = stdMath.abs(x2 - x1), dy1 = stdMath.abs(y2 - y1),
+        dx2 = stdMath.abs(x3 - x2), dy2 = stdMath.abs(y3 - y2),
+        sx1, sy1, sx2, sy2,
+        n1, n2, m1, m2, im1, im2,
+        cos1, sin1, cos2, sin2,
+        wx1, wy1, wx2, wy2,
+        wsx1, wsy1, wsx2, wsy2,
+        a1, b1, c1, d1,
+        a2, b2, c2, d2,
+        x, y, xx, yy, p, q, e = 0.5;
+
+    if (is_almost_equal(dy1*dx2, dy2*dx1)) return;
+
+    w -= 1;
+    sx1 = x1 > x2 ? -1 : 1;
+    sy1 = y1 > y2 ? -1 : 1;
+    sx2 = x2 > x3 ? -1 : 1;
+    sy2 = y2 > y3 ? -1 : 1;
+    if (0 === dx1)
+    {
+        n1 = dy1;
+        m1 = 1;
+        cos1 = 0;
+        sin1 = 1;
+        im1 = 0;
+    }
+    else
+    {
+        n1 = hypot(dx1, dy1);
+        m1 = dy1/dx1;
+        cos1 = dy1/n1;
+        sin1 = dx1/n1;
+        im1 = 1/m1;
+    }
+    wx1 = cos1*w/2;
+    wy1 = sin1*w/2;
+    wsx1 = sx1*wx1;
+    wsy1 = sy1*wy1;
+    if (0 === dx2)
+    {
+        n2 = dy2;
+        m2 = 1;
+        cos2 = 0;
+        sin2 = 1;
+        im2 = 0;
+    }
+    else
+    {
+        n2 = hypot(dx2, dy2);
+        m2 = dy2/dx2;
+        cos2 = dy2/n2;
+        sin2 = dx2/n2;
+        im2 = 1/m2;
+    }
+    wx2 = cos2*w/2;
+    wy2 = sin2*w/2;
+    wsx2 = sx2*wx2;
+    wsy2 = sy2*wy2;
+
+    a1 = {x:x1 - wsx1, y:y1 + wsy1};
+    b1 = {x:x1 + wsx1, y:y1 - wsy1};
+    c1 = {x:x2 - wsx1, y:y2 + wsy1};
+    d1 = {x:x2 + wsx1, y:y2 - wsy1};
+
+    a2 = {x:x2 - wsx2, y:y2 + wsy2};
+    b2 = {x:x2 + wsx2, y:y2 - wsy2};
+    c2 = {x:x3 - wsx2, y:y3 + wsy2};
+    d2 = {x:x3 + wsx2, y:y3 - wsy2};
+
+    if ('bevel' === j)
+    {
+        wu_line(set_pixel, c1.x, c1.y, a2.x, a2.y);
+        for (y=stdMath.round(y2),yy=stdMath.round(stdmath.max(c1.y, a2.y)); y<yy; ++y)
+        {
+            xx = intersect_x(y, im1, c1, im2, a2);
+            if (p = intersect({x:xx[0], y:y}, {x:xx[1], y:y}, c1, a2))
+            {
+                xx[0] = stdMath.max(p.x, xx[0]);
+                xx[1] = stdMath.max(p.x, xx[1]);
+            }
+            fill_rect(set_pixel, stdMath.round(xx[0] + e), y, stdMath.round(xx[1] - e), y);
+        }
+    }
+    else if ('miter' === j)
+    {
+        q = intersect(a1, c1, a2, c2)
+        for (y=stdMath.round(y2),yy=stdMath.round(stdMath.max(c1.y, a2.y, q.y)); y<yy; ++y)
+        {
+            xx = intersect_x(y, im1, c1, im2, a2);
+            p = intersect_x(y, m1, q);
+            xx[0] = stdMath.max(p[0], xx[0]);
+            xx[1] = stdMath.max(p[0], xx[1]);
+            p = intersect_x(y, m2, q);
+            xx[0] = stdMath.max(p[0], xx[0]);
+            xx[1] = stdMath.max(p[0], xx[1]);
+            fill_rect(set_pixel, stdMath.round(xx[0] + e), y, stdMath.round(xx[1] - e), y);
         }
     }
 }
