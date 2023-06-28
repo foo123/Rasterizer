@@ -901,7 +901,7 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, w, j)
     if ('bevel' === j)
     {
         wu_line(set_pixel, c1.x, c1.y, a2.x, a2.y);
-        for (y=stdMath.round(y2),yy=stdMath.round(stdmath.max(c1.y, a2.y)); y<yy; ++y)
+        for (y=stdMath.round(y2),yy=stdMath.round(stdMath.max(c1.y, a2.y)); y<=yy; ++y)
         {
             xx = intersect_x(y, im1, c1, im2, a2);
             if (p = intersect({x:xx[0], y:y}, {x:xx[1], y:y}, c1, a2))
@@ -915,15 +915,14 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, w, j)
     else if ('miter' === j)
     {
         q = intersect(a1, c1, a2, c2)
-        for (y=stdMath.round(y2),yy=stdMath.round(stdMath.max(c1.y, a2.y, q.y)); y<yy; ++y)
+        wu_line(set_pixel, c1.x, c1.y, q.x, q.y);
+        wu_line(set_pixel, a2.x, a2.y, q.x, q.y);
+        for (y=stdMath.round(y2),yy=stdMath.round(stdMath.max(c1.y, a2.y, q.y)); y<=yy; ++y)
         {
-            xx = intersect_x(y, im1, c1, im2, a2);
-            p = intersect_x(y, m1, q);
-            xx[0] = stdMath.max(p[0], xx[0]);
-            xx[1] = stdMath.max(p[0], xx[1]);
-            p = intersect_x(y, m2, q);
-            xx[0] = stdMath.max(p[0], xx[0]);
-            xx[1] = stdMath.max(p[0], xx[1]);
+            xx = intersect_x(y, -m1, q, m2, q);
+            p = intersect_x(y, im1, c1, -im2, a2);
+            xx[0] = stdMath.max(xx[0], p[0]);
+            xx[1] = stdMath.min(xx[1], p[1]);
             fill_rect(set_pixel, stdMath.round(xx[0] + e), y, stdMath.round(xx[1] - e), y);
         }
     }
