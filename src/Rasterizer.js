@@ -21,12 +21,11 @@ else if (!(name in root)) /* Browser/WebWorker/.. */
 
 var HAS = Object.prototype.hasOwnProperty,
     def = Object.defineProperty,
-    stdMath = Math, INF = Infinity,
+    stdMath = Math, INF = Infinity, PI = stdMath.PI,
     EPS = 1e-6, sqrt2 = stdMath.sqrt(2),
-    NUM_POINTS = 20, PIXEL_SIZE = 1,
-    PI = stdMath.PI, EMPTY_ARR = [],
+    NUM_POINTS = 20, PIXEL_SIZE = 2,
     NOOP = function() {},
-    err = function(msg) {throw new Error(msg);},
+    err = function err(msg) {throw new Error(msg);},
     ImArray = 'undefined' !== typeof Uint8ClampedArray ? Uint8ClampedArray : ('undefined' !== typeof Uint8Array ? Uint8Array : Array);
 
 function Rasterizer(width, height, set_rgba_at)
@@ -390,7 +389,7 @@ function stroke_polyline(set_pixel, points, lw, ld, lc, lj, xmin, ymin, xmax, ym
             dx2 = stdMath.abs(x2 - x1);
             dy2 = stdMath.abs(y2 - y1);
             w2 = ww(lw, dx2, dy2);
-            stroke_line(set_pixel, x1, y1, x2, y2, dx2, dy2, w2[0], w2[1], 0 === i ? lc : null, n === i+1 ? lc : null, xmin, ymin, xmax, ymax);
+            stroke_line(set_pixel, x1, y1, x2, y2, dx2, dy2, w2[0], w2[1], 0 === i ? lc : null, n === i+2 ? lc : null, xmin, ymin, xmax, ymax);
             if (1 < lw && 0 < i)
             {
                 join_lines(set_pixel, xp, yp, x1, y1, x2, y2, dx1, dy1, w1[0], w1[1], dx2, dy2, w2[0], w2[1], lj, xmin, ymin, xmax, ymax);
@@ -628,29 +627,26 @@ function fill_rect(set_pixel, x1, y1, x2, y2)
 function fill_triangle(set_pixel, a, b, c, xmin, ymin, xmax, ymax)
 {
     // fill the triangle defined by a, b, c points
-    var y, yb, yc, x, xx, t, d,
+    var y, yb, yc, x, xx, t,
+        dac, dab, dbc, yac, yab, ybc,
         clip = null != xmin, e = 0.5;
     if (b.y < a.y) {t = a; a = b; b = t;}
     if (c.y < a.y) {t = a; a = c; c = t;}
     if (c.y < b.y) {t = b; b = c; c = t;}
+    dac = c.x - a.x;
+    dab = b.x - a.x;
+    dbc = c.x - b.x;
+    yac = c.y - a.y;
+    yab = b.y - a.y;
+    ybc = c.y - b.y;
     y = stdMath.round(a.y + e);
     yb = stdMath.round(b.y);
     yc = stdMath.round(c.y - e);
     if (clip) {y = stdMath.max(ymin, y); yc = stdMath.min(ymax, yc);}
     for (; y<=yc; ++y)
     {
-        d = c.x - a.x;
-        x = is_strictly_equal(d, 0) ? a.x : (d*(y - a.y)/(c.y - a.y) + a.x);
-        if (y < yb)
-        {
-            d = b.x - a.x;
-            xx = is_strictly_equal(d, 0) ? a.x : (d*(y - a.y)/(b.y - a.y) + a.x);
-        }
-        else
-        {
-            d = c.x - b.x;
-            xx = is_strictly_equal(d, 0) ? b.x : (d*(y - b.y)/(c.y - b.y) + b.x);
-        }
+        x = is_strictly_equal(dac, 0) ? a.x : (dac*(y - a.y)/yac + a.x);
+        xx = y < yb ? (is_strictly_equal(dab, 0) ? a.x : (dab*(y - a.y)/yab + a.x)) : (is_strictly_equal(dbc, 0) ? b.x : (dbc*(y - b.y)/ybc + b.x));
         if (xx < x)
         {
             t = x;
@@ -778,8 +774,8 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy)
 }
 function wu_thick_line(set_pixel, xs, ys, xe, ye, dx, dy, wx, wy, cs, ce)
 {
-    var t, xx, yy,
-        sx, sy, wsx, wsy,
+    var t, sx, sy,
+        wsx, wsy,
         a, b, c, d;
 
     if (xs > xe)
@@ -850,6 +846,63 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
     // fill
     fill_triangle(set_pixel, a, b, c);
     fill_triangle(set_pixel, b, c, d);
+    /*
+    // fill
+    if (dy > dx)
+    {
+        for (ys=stdMath.round(b.y)+sy,ye=stdMath.round(a.y); sy*(ye-ys)>0; ys+=sy)
+        {
+            xx = intersect_x(ys, im, b, -m, b);
+            if (0 < xx[1] - xx[0])
+            {
+                fill_rect(set_pixel, stdMath.round(xx[0] + e), ys, stdMath.round(xx[1] - e), ys);
+            }
+        }
+        for (ys=ye,ye=stdMath.round(g.y); sy*(ye-ys)>0; ys+=sy)
+        {
+            xx = intersect_x(ys, -m, c, -m, b);
+            if (0 < xx[1] - xx[0])
+            {
+                fill_rect(set_pixel, stdMath.round(xx[0] + e), ys, stdMath.round(xx[1] - e), ys);
+            }
+        }
+        for (ys=ye,ye=stdMath.round(c.y); sy*(ye-ys)>0; ys+=sy)
+        {
+            xx = intersect_x(ys, -m, c, im, c);
+            if (0 < xx[1] - xx[0])
+            {
+                fill_rect(set_pixel, stdMath.round(xx[0] + e), ys, stdMath.round(xx[1] - e), ys);
+            }
+        }
+    }
+    else
+    {
+        for (xs=stdMath.round(a.x)+1,xe=stdMath.round(b.x); xs<xe; ++xs)
+        {
+            yy = intersect_y(xs, im, a, -m, a);
+            if (0 < yy[1] - yy[0])
+            {
+                fill_rect(set_pixel, xs, stdMath.round(yy[0] + e), xs, stdMath.round(yy[1] - e));
+            }
+        }
+        for (xs=xe,xe=stdMath.round(c.x); xs<xe; ++xs)
+        {
+            yy = intersect_y(xs, -m, a, -m, d);
+            if (0 < yy[1] - yy[0])
+            {
+                fill_rect(set_pixel, xs, stdMath.round(yy[0] + e), xs, stdMath.round(yy[1] - e));
+            }
+        }
+        for (xs=xe,xe=stdMath.round(d.x); xs<xe; ++xs)
+        {
+            yy = intersect_y(xs, im, d, -m, d);
+            if (0 < yy[1] - yy[0])
+            {
+                fill_rect(set_pixel, xs, stdMath.round(yy[0] + e), xs, stdMath.round(yy[1] - e));
+            }
+        }
+    }
+    */
 }
 function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, dy2, wx2, wy2, j, xmin, ymin, xmax, ymax)
 {
