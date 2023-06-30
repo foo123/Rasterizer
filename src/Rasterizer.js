@@ -393,7 +393,7 @@ function stroke_polyline(set_pixel, points, lw, ld, lc, lj, xmin, ymin, xmax, ym
             stroke_line(set_pixel, x1, y1, x2, y2, dx2, dy2, w2[0], w2[1], 0 === i ? lc : null, n === i+1 ? lc : null, xmin, ymin, xmax, ymax);
             if (1 < lw && 0 < i)
             {
-                join_lines(set_pixel, xp, yp, x1, y1, x2, y2, dx1, dy1, w1[0], w1[1], dx2, dy2, w2[0], w2[1], lj);
+                join_lines(set_pixel, xp, yp, x1, y1, x2, y2, dx1, dy1, w1[0], w1[1], dx2, dy2, w2[0], w2[1], lj, xmin, ymin, xmax, ymax);
             }
             xp = x1;
             yp = y1;
@@ -441,10 +441,10 @@ function stroke_arc(set_pixel, cx, cy, rx, ry, a, t0, t1, lw, ld, lc, lj, xmin, 
             var p = t0 + t*(t1 - t0),
                 x = rx*stdMath.cos(p),
                 y = ry*stdMath.sin(p);
-            return {
-                x: cx + cos*x - sin*y,
-                y: cy + sin*x + cos*y
-            };
+            return [
+                cx + cos*x - sin*y,
+                cy + sin*x + cos*y
+            ];
         };
     stroke_polyline(set_pixel, sample_curve(arc, NUM_POINTS, PIXEL_SIZE, true), lw, ld, 'butt', 'bevel', xmin, ymin, xmax, ymax);
 }
@@ -453,41 +453,24 @@ function stroke_bezier(set_pixel, c, lw, ld, lc, lj, xmin, ymin, xmax, ymax)
     var n, i, p, q,
         bezier2 = function(t) {
            var t0 = t, t1 = 1 - t, t11 = t1*t1, t10 = 2*t1*t0, t00 = t0*t0;
-           return {
-               x: t11*c[0] + t10*c[2] + t00*c[4],
-               y: t11*c[1] + t10*c[3] + t00*c[5]
-           };
+           return [
+               t11*c[0] + t10*c[2] + t00*c[4],
+               t11*c[1] + t10*c[3] + t00*c[5]
+           ];
         },
         bezier3 = function(t) {
             var t0 = t, t1 = 1 - t,
                 t0t0 = t0*t0, t1t1 = t1*t1,
                 t111 = t1t1*t1, t000 = t0t0*t0,
                 t110 = 3*t1t1*t0, t100 = 3*t0t0*t1;
-           return {
-               x: t111*c[0] + t110*c[2] + t100*c[4] + t000*c[6],
-               y: t111*c[1] + t110*c[3] + t100*c[5] + t000*c[7]
-           };
+           return [
+               t111*c[0] + t110*c[2] + t100*c[4] + t000*c[6],
+               t111*c[1] + t110*c[3] + t100*c[5] + t000*c[7]
+           ];
         };
     stroke_polyline(set_pixel, sample_curve(6 < c.length ? bezier3 : bezier2, NUM_POINTS, PIXEL_SIZE, true), lw, ld, lc, 'bevel', xmin, ymin, xmax, ymax);
 }
 
-// utilities -----------------------
-function clamp(x, min, max)
-{
-    return stdMath.min(stdMath.max(x, min), max);
-}
-function sign(x)
-{
-    return 0 > x ? -1 : 1;
-}
-function is_almost_equal(a, b)
-{
-    return stdMath.abs(a - b) < EPS;
-}
-function is_strictly_equal(a, b)
-{
-    return stdMath.abs(a - b) < Number.EPSILON;
-}
 function clip(x1, y1, x2, y2, xmin, ymin, xmax, ymax)
 {
     // clip points to viewport
@@ -563,8 +546,8 @@ function ww(w, dx, dy)
     }
     else
     {
-        var n = hypot(dx, dy);
-        return [dy/n*(w-1)/2, dx/n*(w-1)/2];
+        var n = hypot(dx, dy), w2 = (w-1)/2;
+        return [dy*w2/n, dx*w2/n];
     }
 }
 function intersect_x(y, m, p, n, q)
@@ -585,30 +568,20 @@ function intersect_y(x, m, p, n, q)
 }
 function intersect_x2(y, p1, p2, q1, q2)
 {
-    var d1 = p2.x - p1.x,
-        f1 = is_almost_equal(d1, 0),
-        m = f1 ? INF : -(p2.y - p1.y)/d1,
-        d2, f2, n, xm, xn;
-    xm = f1 ? p1.x : ((p1.y - y)/m + p1.x);
+    var d = p2.x - p1.x, xm, xn;
+    xm = is_strictly_equal(d, 0) ? p1.x : (d*(y - p1.y)/(p2.y - p1.y) + p1.x);
     if (null == q1) return xm;
-    d2 = q2.x - q1.x;
-    f2 = is_almost_equal(d2, 0),
-    n = f2 ? INF : -(q2.y - q1.y)/d2
-    xn = f2 ? q1.x : ((q1.y - y)/n + q1.x);
+    d = q2.x - q1.x;
+    xn = is_strictly_equal(d, 0) ? q1.x : (d*(y - q1.y)/(q2.y - q1.y) + q1.x);
     return xm > xn ? [xn, xm] : [xm, xn];
 }
 /*function intersect_y2(x, p1, p2, q1, q2)
 {
-    var d1 = p2.x - p1.x,
-        f1 = is_almost_equal(d1, 0),
-        m = f1 ? INF : -(p2.y - p1.y)/d1,
-        d2, f2, n, ym, yn;
-    ym = f1 ? (is_almost_equal(x, p1.x) ? p1.y : false) : (p1.y - m*(x - p1.x));
+    var d = p2.x - p1.x, ym, yn;
+    ym = is_strictly_equal(d, 0) ? (is_almost_equal(x, p1.x) ? p1.y : false) : (p1.y + (p2.y - p1.y)*(x - p1.x)/d);
     if (null == q1) return ym;
-    d2 = q2.x - q1.x;
-    f2 = is_almost_equal(d2, 0);
-    n = f2 ? INF : -(q2.y - q1.y)/d2;
-    yn = f2 ? (is_almost_equal(x, q1.x) ? q1.y : false) : (q1.y - n*(x - q1.x));
+    d = q2.x - q1.x;
+    yn = is_strictly_equal(d, 0) ? (is_almost_equal(x, q1.x) ? q1.y : false) : (q1.y + (q2.y - q1.y)*(x - q1.x)/d);
     if (false === ym || false === yn) return false;
     return ym > yn ? [yn, ym] : [ym, yn];
 }*/
@@ -658,6 +631,39 @@ function fill_rect(set_pixel, x1, y1, x2, y2)
             {
                 set_pixel(x, y, 1);
             }
+        }
+    }
+}
+function fill_triangle(set_pixel, a, b, c, xmin, ymin, xmax, ymax)
+{
+    var y, yb, yc, x, xx, x1, x2, t, d, e = 0.5;
+    if (b.y < a.y) {t = a; a = b; b = t;}
+    if (c.y < a.y) {t = a; a = c; c = t;}
+    if (c.y < b.y) {t = b; b = c; c = t;}
+    for (y=stdMath.max(ymin, stdMath.round(a.y+1)),yb = stdMath.round(b.y),yc=stdMath.min(ymax+1, stdMath.round(c.y)); y<yc; ++y)
+    {
+        //i = y < yb ? intersect_x2(y, a, c, a, b) : intersect_x2(y, a, c, b, c);
+        d = c.x - a.x;
+        x1 = is_strictly_equal(d, 0) ? a.x : (d*(y - a.y)/(c.y - a.y) + a.x);
+        if (y < yb)
+        {
+            d = b.x - a.x;
+            x2 = is_strictly_equal(d, 0) ? a.x : (d*(y - a.y)/(b.y - a.y) + a.x);
+        }
+        else
+        {
+            d = c.x - b.x;
+            x2 = is_strictly_equal(d, 0) ? b.x : (d*(y - b.y)/(c.y - b.y) + b.x);
+        }
+        if (x2 < x1)
+        {
+            t = x1;
+            x1 = x2;
+            x2 = t;
+        }
+        for (x=stdMath.max(xmin, stdMath.round(x1 + e)),xx=stdMath.min(xmax, stdMath.round(x2 - e)); x<=xx; ++x)
+        {
+            set_pixel(x, y, 1);
         }
     }
 }
@@ -905,19 +911,7 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
         }
     }
 }
-function fill_triangle(set_pixel, a, b, c)
-{
-    var y, yb, yc, xx, t, e = 0.5;
-    if (b.y < a.y) {t = a; a = b; b = t;}
-    if (c.y < a.y) {t = a; a = c; c = t;}
-    if (c.y < b.y) {t = b; b = c; c = t;}
-    for (y=stdMath.round(a.y)+1,yb = stdMath.round(b.y),yc=stdMath.round(c.y); y<yc; ++y)
-    {
-        xx = y < yb ? intersect_x2(y, a, c, a, b) : intersect_x2(y, a, c, b, c);
-        fill_rect(set_pixel, stdMath.round(xx[0] + e), y, stdMath.round(xx[1] - e), y);
-    }
-}
-function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, dy2, wx2, wy2, j)
+function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, dy2, wx2, wy2, j, xmin, ymin, xmax, ymax)
 {
     if (is_almost_equal(dy1*dx2, dy2*dx1)) return;
 
@@ -996,7 +990,7 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
     if ('bevel' === j)
     {
         wu_line(set_pixel, p.x, p.y, q.x, q.y);
-        fill_triangle(set_pixel, s, p, q);
+        fill_triangle(set_pixel, s, p, q, xmin, ymin, xmax, ymax);
     }
     if ('miter' === j)
     {
@@ -1024,9 +1018,28 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
         }
         wu_line(set_pixel, p.x, p.y, t.x, t.y);
         wu_line(set_pixel, q.x, q.y, t.x, t.y);
-        fill_triangle(set_pixel, s, p, q);
-        fill_triangle(set_pixel, t, p, q);
+        fill_triangle(set_pixel, s, p, q, xmin, ymin, xmax, ymax);
+        fill_triangle(set_pixel, t, p, q, xmin, ymin, xmax, ymax);
     }
+}
+
+
+// utilities -----------------------
+function clamp(x, min, max)
+{
+    return stdMath.min(stdMath.max(x, min), max);
+}
+function sign(x)
+{
+    return 0 > x ? -1 : 1;
+}
+function is_almost_equal(a, b)
+{
+    return stdMath.abs(a - b) < EPS;
+}
+function is_strictly_equal(a, b)
+{
+    return stdMath.abs(a - b) < Number.EPSILON;
 }
 function hypot(dx, dy)
 {
@@ -1055,9 +1068,9 @@ function hypot(dx, dy)
 }
 function point_line_distance(p0, p1, p2)
 {
-    var x1 = p1.x, y1 = p1.y,
-        x2 = p2.x, y2 = p2.y,
-        x = p0.x, y = p0.y,
+    var x1 = p1[0], y1 = p1[1],
+        x2 = p2[0], y2 = p2[1],
+        x = p0[0], y = p0[1],
         dx = x2 - x1, dy = y2 - y1,
         d = hypot(dx, dy)
     ;
@@ -1072,7 +1085,7 @@ function sample_curve(f, n, pixelSize, do_refine)
     if (do_refine)
     {
         p = f(0);
-        points.push(p.x, p.y);
+        points.push(p[0], p[1]);
         for (i=0; i<n; ++i)
         {
             subdivide_curve(points, f, 0 === i ? 0 : i/n, n === i+1 ? 1 : (i+1)/n, pixelSize, null, null);
@@ -1083,7 +1096,7 @@ function sample_curve(f, n, pixelSize, do_refine)
         for (i=0; i<=n; ++i)
         {
             p = f(0 === i ? 0 : (n === i ? 1 : i/n));
-            points.push(p.x, p.y);
+            points.push(p[0], p[1]);
         }
     }
     return points;
@@ -1096,7 +1109,7 @@ function subdivide_curve(points, f, l, r, pixelSize, pl, pr)
     {
         // no more refinement
         // return linear interpolation between left and right
-        points.push(right.x, right.y);
+        points.push(right[0], right[1]);
     }
     else
     {
