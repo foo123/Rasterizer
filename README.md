@@ -15,3 +15,7 @@ Rasterize, draw and fill lines, rectangles and curves. Even without canvas.
 **`miter` line join**
 
 ![miter line join](/joinmiter.png)
+
+**arc**
+
+![gradient arc](/arc.png)

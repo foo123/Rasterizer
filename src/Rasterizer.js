@@ -26,6 +26,7 @@ var HAS = Object.prototype.hasOwnProperty,
     NUM_POINTS = 20, PIXEL_SIZE = 1,
     PI = stdMath.PI, EMPTY_ARR = [],
     NOOP = function() {},
+    err = function(msg) {throw new Error(msg);},
     ImArray = 'undefined' !== typeof Uint8ClampedArray ? Uint8ClampedArray : ('undefined' !== typeof Uint8Array ? Uint8Array : Array);
 
 function Rasterizer(width, height, set_rgba_at)
@@ -89,7 +90,11 @@ function Rasterizer(width, height, set_rgba_at)
             return lineWidth;
         },
         set: function(lw) {
-            lineWidth = stdMath.abs((+lw) || 0);
+            lw = stdMath.abs((+lw) || 0);
+            if (0 < lw)
+            {
+                lineWidth = lw;
+            }
         }
     });
 
@@ -99,10 +104,14 @@ function Rasterizer(width, height, set_rgba_at)
         },
         set: function(lc) {
             lc = String(lc).toLowerCase();
-            if (-1 !== ['butt', 'square'].indexOf(lc))
+            if (-1 !== ['butt','square'].indexOf(lc))
             {
                 // only 'butt' and 'square' lineCap supported
                 lineCap = lc;
+            }
+            else
+            {
+                err('"'+lc+'" lineCap is not supported!');
             }
         }
     });
@@ -117,6 +126,10 @@ function Rasterizer(width, height, set_rgba_at)
             {
                 // only 'miter' and 'bevel' lineJoin supported
                 lineJoin = lj;
+            }
+            else
+            {
+                err('"'+lj+'" lineJoin is not supported!');
             }
         }
     });
@@ -138,10 +151,7 @@ function Rasterizer(width, height, set_rgba_at)
     self.strokeRect = function(x, y, w, h) {
         if (1 <= w && 1 <= h && 0 < lineWidth)
         {
-            draw_line(stroke_pixel, x, y, x + w - 1, y, lineWidth, lineDash, 'butt', 'miter', 0, 0, width - 1, height - 1);
-            draw_line(stroke_pixel, x + w - 1, y, x + w - 1, y + h - 1, lineWidth, lineDash, 'butt', 'miter', 0, 0, width - 1, height - 1);
-            draw_line(stroke_pixel, x + w - 1, y + h - 1, x, y + h - 1, lineWidth, lineDash, 'butt', 'miter', 0, 0, width - 1, height - 1);
-            draw_line(stroke_pixel, x, y + h - 1, x, y, lineWidth, lineDash, 'butt', 'miter', 0, 0, width - 1, height - 1);
+            stroke_polyline(stroke_pixel, [x, y, x + w - 1, y, x + w - 1, y + h - 1, x, y + h - 1, x, y], lineWidth, lineDash, 'butt', 'miter', 0, 0, width - 1, height - 1);
         }
         return self;
     };
@@ -152,21 +162,14 @@ function Rasterizer(width, height, set_rgba_at)
         }
         return self;
     };
-    self.drawLine = function(x1, y1, x2, y2) {
+    self.strokePolyline = function() {
         if (0 < lineWidth)
         {
-            draw_line(stroke_pixel, x1, y1, x2, y2, lineWidth, lineDash, lineCap, lineJoin, 0, 0, width - 1, height - 1);
+            stroke_polyline(stroke_pixel, arguments, lineWidth, lineDash, lineCap, lineJoin, 0, 0, width - 1, height - 1);
         }
         return self;
     };
-    self.joinLines = function(x1, y1, x2, y2, x3, y3) {
-        if (0 < lineWidth)
-        {
-            join_lines(stroke_pixel, x1, y1, x2, y2, x3, y3, lineWidth, lineJoin);
-        }
-        return self;
-    };
-    self.drawArc = function(cx, cy, rx, ry, angle, start, end, fs) {
+    self.strokeArc = function(cx, cy, rx, ry, angle, start, end, fs) {
         if (0 < lineWidth)
         {
             var t0, t1;
@@ -180,20 +183,20 @@ function Rasterizer(width, height, set_rgba_at)
                 t0 = start;
                 t1 = end;
             }
-            draw_arc(stroke_pixel, cx, cy, rx, ry, angle, t0, t1, lineWidth, lineDash, lineCap, lineJoin, 0, 0, width - 1, height - 1);
+            stroke_arc(stroke_pixel, cx, cy, rx, ry, angle, t0, t1, lineWidth, lineDash, lineCap, 'bevel', 0, 0, width - 1, height - 1);
         }
         return self;
     };
-    self.drawBezier = function(controls) {
-        if (0 < lineWidth && 2 <= controls.length)
+    self.strokeBezier = function() {
+        if (0 < lineWidth && 4 <= arguments.length)
         {
-            if (2 === controls.length)
+            if (4 === arguments.length)
             {
-                draw_line(stroke_pixel, controls[0].x, controls[0].y, controls[1].x, controls[1].y, lineWidth, lineDash, lineCap, lineJoin, 0, 0, width - 1, height - 1);
+                stroke_polyline(stroke_pixel, arguments, lineWidth, lineDash, lineCap, lineJoin, 0, 0, width - 1, height - 1);
             }
             else
             {
-                draw_bezier(stroke_pixel, controls, lineWidth, lineDash, lineCap, lineJoin, 0, 0, width - 1, height - 1);
+                stroke_bezier(stroke_pixel, arguments, lineWidth, lineDash, lineCap, 'bevel', 0, 0, width - 1, height - 1);
             }
         }
         return self;
@@ -207,12 +210,13 @@ Rasterizer.prototype = {
     lineWidth: null,
     lineCap: null,
     lineJoin: null,
+    lineDash: null,
     setLineDash: null,
     strokeRect: null,
     fillRect: null,
-    drawLine: null,
-    drawArc: null,
-    drawBezier: null
+    strokePolyline: null,
+    strokeArc: null,
+    strokeBezier: null
 };
 Rasterizer.createImageData = function(width, height) {
     return {
@@ -231,7 +235,7 @@ Rasterizer.getRGBAFrom = function(RGBA) {
     }
     else
     {
-        var c = [RGBA[0], RGBA[1], RGBA[2], 3 < RGBA.length ? RGBA[3]/255 : 1.0];
+        var c = [RGBA[0], RGBA[1], RGBA[2], 3 < RGBA.length ? clamp(RGBA[3], 0, 1) : 1.0];
         return function(x, y) {
             return c;
         };
@@ -289,7 +293,7 @@ function fill_rectangular(set_pixel, x1, y1, x2, y2, xmin, ymin, xmax, ymax)
     fill_rect(set_pixel, stdMath.round(xm), stdMath.round(ym), stdMath.round(xM), stdMath.round(yM));
 }
 
-function draw_line(set_pixel, x1, y1, x2, y2, lw, ld, lc, lj, xmin, ymin, xmax, ymax)
+/*function draw_line(set_pixel, x1, y1, x2, y2, lw, ld, lc, lj, xmin, ymin, xmax, ymax)
 {
     var xm = stdMath.min(x1, x2), xM = stdMath.max(x1, x2),
         ym = stdMath.min(y1, y2), yM = stdMath.max(y1, y2);
@@ -357,8 +361,78 @@ function draw_line(set_pixel, x1, y1, x2, y2, lw, ld, lc, lj, xmin, ymin, xmax, 
             on_line = 1 - (k&1);
         }
     }
+}*/
+function stroke_polyline(set_pixel, points, lw, ld, lc, lj, xmin, ymin, xmax, ymax)
+{
+    var n = points.length, i,
+        x1, y1, x2, y2, xp, yp,
+        dx1, dy1, dx2, dy2, w1, w2;
+    if (n < 6)
+    {
+        x1 = points[0];
+        y1 = points[1];
+        x2 = points[2];
+        y2 = points[3];
+        dx2 = stdMath.abs(x2 - x1);
+        dy2 = stdMath.abs(y2 - y1);
+        w2 = ww(lw, dx2, dy2);
+        stroke_line(set_pixel, x1, y1, x2, y2, dx2, dy2, w2[0], w2[1], lc, lc, xmin, ymin, xmax, ymax);
+    }
+    else
+    {
+        n -= 2;
+        for (i=0; i<n; i+=2)
+        {
+            x1 = points[i];
+            y1 = points[i+1];
+            x2 = points[i+2];
+            y2 = points[i+3];
+            dx2 = stdMath.abs(x2 - x1);
+            dy2 = stdMath.abs(y2 - y1);
+            w2 = ww(lw, dx2, dy2);
+            stroke_line(set_pixel, x1, y1, x2, y2, dx2, dy2, w2[0], w2[1], 0 === i ? lc : null, n === i+1 ? lc : null, xmin, ymin, xmax, ymax);
+            if (1 < lw && 0 < i)
+            {
+                join_lines(set_pixel, xp, yp, x1, y1, x2, y2, dx1, dy1, w1[0], w1[1], dx2, dy2, w2[0], w2[1], lj);
+            }
+            xp = x1;
+            yp = y1;
+            dx1 = dx2;
+            dy1 = dy2;
+            w1 = w2;
+        }
+    }
 }
-function draw_arc(set_pixel, cx, cy, rx, ry, a, t0, t1, lw, ld, lc, lj, xmin, ymin, xmax, ymax)
+function stroke_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, xmin, ymin, xmax, ymax)
+{
+    var xm = stdMath.min(x1, x2), xM = stdMath.max(x1, x2),
+        ym = stdMath.min(y1, y2), yM = stdMath.max(y1, y2);
+
+    // if line is outside viewport return
+    if (!(xM > xmin && xm < xmax && yM > ymin && ym < ymax)) return;
+
+    // clip it to viewport if needed
+    if (xm < xmin || xM > xmax || ym < ymin || yM > ymax)
+    {
+        var clipped = clip(x1, y1, x2, y2, xmin, ymin, xmax, ymax);
+        if (!clipped) return;
+        if (!is_almost_equal(x1, clipped[0]) || !is_almost_equal(y1, clipped[1])) c1 = null;
+        if (!is_almost_equal(x2, clipped[2]) || !is_almost_equal(y2, clipped[3])) c2 = null;
+        x1 = clipped[0];
+        y1 = clipped[1];
+        x2 = clipped[2];
+        y2 = clipped[3];
+    }
+    if (0 === wx && 0 === wy)
+    {
+        wu_line(set_pixel, x1, y1, x2, y2, dx, dy);
+    }
+    else
+    {
+        wu_thick_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2);
+    }
+}
+function stroke_arc(set_pixel, cx, cy, rx, ry, a, t0, t1, lw, ld, lc, lj, xmin, ymin, xmax, ymax)
 {
     var n, i, p, q,
         cos = stdMath.cos(a),
@@ -371,23 +445,17 @@ function draw_arc(set_pixel, cx, cy, rx, ry, a, t0, t1, lw, ld, lc, lj, xmin, ym
                 x: cx + cos*x - sin*y,
                 y: cy + sin*x + cos*y
             };
-        },
-        points = sample_curve(arc, NUM_POINTS, PIXEL_SIZE, true);
-    for (i=0,n=points.length-1; i<n; ++i)
-    {
-        p = points[i];
-        q = points[i+1];
-        draw_line(set_pixel, p.x, p.y, q.x, q.y, lw, ld, lc, lj, xmin, ymin, xmax, ymax);
-    }
+        };
+    stroke_polyline(set_pixel, sample_curve(arc, NUM_POINTS, PIXEL_SIZE, true), lw, ld, 'butt', 'bevel', xmin, ymin, xmax, ymax);
 }
-function draw_bezier(set_pixel, c, lw, ld, lc, lj, xmin, ymin, xmax, ymax)
+function stroke_bezier(set_pixel, c, lw, ld, lc, lj, xmin, ymin, xmax, ymax)
 {
     var n, i, p, q,
         bezier2 = function(t) {
            var t0 = t, t1 = 1 - t, t11 = t1*t1, t10 = 2*t1*t0, t00 = t0*t0;
            return {
-               x: t11*c[0].x + t10*c[1].x + t00*c[2].x,
-               y: t11*c[0].y + t10*c[1].y + t00*c[2].y
+               x: t11*c[0] + t10*c[2] + t00*c[4],
+               y: t11*c[1] + t10*c[3] + t00*c[5]
            };
         },
         bezier3 = function(t) {
@@ -396,17 +464,11 @@ function draw_bezier(set_pixel, c, lw, ld, lc, lj, xmin, ymin, xmax, ymax)
                 t111 = t1t1*t1, t000 = t0t0*t0,
                 t110 = 3*t1t1*t0, t100 = 3*t0t0*t1;
            return {
-               x: t111*c[0].x + t110*c[1].x + t100*c[2].x + t000*c[3].x,
-               y: t111*c[0].y + t110*c[1].y + t100*c[2].y + t000*c[3].y
+               x: t111*c[0] + t110*c[2] + t100*c[4] + t000*c[6],
+               y: t111*c[1] + t110*c[3] + t100*c[5] + t000*c[7]
            };
-        },
-        points = sample_curve(3 < c.length ? bezier3 : bezier2, NUM_POINTS, PIXEL_SIZE, true);
-    for (i=0,n=points.length-1; i<n; ++i)
-    {
-        p = points[i];
-        q = points[i+1];
-        draw_line(set_pixel, p.x, p.y, q.x, q.y, lw, ld, lc, lj, xmin, ymin, xmax, ymax);
-    }
+        };
+    stroke_polyline(set_pixel, sample_curve(6 < c.length ? bezier3 : bezier2, NUM_POINTS, PIXEL_SIZE, true), lw, ld, lc, 'bevel', xmin, ymin, xmax, ymax);
 }
 
 // utilities -----------------------
@@ -485,37 +547,82 @@ function clip(x1, y1, x2, y2, xmin, ymin, xmax, ymax)
     x1 + p2*rn2, y1 + p4*rn2
     ];
 }
-function intersect_x(y, m, p1/*, p2*/, n, q1/*, q2*/)
+function ww(w, dx, dy)
 {
-    var //m = -(p2.y - p1.y)/(p2.x - p1.x),
-        //n = -(q2.y - q1.y)/(q2.x - q1.x),
-        xm, xn;
-    xm = (p1.y - y)/m + p1.x;
+    if (1 >= w)
+    {
+        return [0, 0];
+    }
+    else if (is_strictly_equal(dx, 0))
+    {
+        return [(w-1)/2, 0];
+    }
+    else if (is_strictly_equal(dy, 0))
+    {
+        return [0, (w-1)/2];
+    }
+    else
+    {
+        var n = hypot(dx, dy);
+        return [dy/n*(w-1)/2, dx/n*(w-1)/2];
+    }
+}
+function intersect_x(y, m, p, n, q)
+{
+    var xm, xn;
+    xm = (p.y - y)/m + p.x;
     if (null == n) return xm;
-    xn = (q1.y - y)/n + q1.x;
+    xn = (q.y - y)/n + q.x;
     return xm > xn ? [xn, xm] : [xm, xn];
 }
-function intersect_y(x, m, p1/*, p2*/, n, q1/*, q2*/)
+function intersect_y(x, m, p, n, q)
 {
-    var //m = -(p2.y - p1.y)/(p2.x - p1.x),
-        //n = -(q2.y - q1.y)/(q2.x - q1.x),
-        ym, yn;
-    ym = p1.y - m*(x - p1.x);
+    var ym, yn;
+    ym = p.y - m*(x - p.x);
     if (null == n) return ym;
-    yn = q1.y - n*(x - q1.x);
+    yn = q.y - n*(x - q.x);
     return ym > yn ? [yn, ym] : [ym, yn];
 }
-function intersect(p1, p2, q1, q2)
+function intersect_x2(y, p1, p2, q1, q2)
 {
-    var a = p2.y - p1.y, b = p1.x - p2.x, c = p2.x*p1.y - p1.x*p2.y,
-        k = q2.y - q1.y, l = q1.x - q2.x, m = q2.x*q1.y - q1.x*q2.y,
+    var d1 = p2.x - p1.x,
+        f1 = is_almost_equal(d1, 0),
+        m = f1 ? INF : -(p2.y - p1.y)/d1,
+        d2, f2, n, xm, xn;
+    xm = f1 ? p1.x : ((p1.y - y)/m + p1.x);
+    if (null == q1) return xm;
+    d2 = q2.x - q1.x;
+    f2 = is_almost_equal(d2, 0),
+    n = f2 ? INF : -(q2.y - q1.y)/d2
+    xn = f2 ? q1.x : ((q1.y - y)/n + q1.x);
+    return xm > xn ? [xn, xm] : [xm, xn];
+}
+/*function intersect_y2(x, p1, p2, q1, q2)
+{
+    var d1 = p2.x - p1.x,
+        f1 = is_almost_equal(d1, 0),
+        m = f1 ? INF : -(p2.y - p1.y)/d1,
+        d2, f2, n, ym, yn;
+    ym = f1 ? (is_almost_equal(x, p1.x) ? p1.y : false) : (p1.y - m*(x - p1.x));
+    if (null == q1) return ym;
+    d2 = q2.x - q1.x;
+    f2 = is_almost_equal(d2, 0);
+    n = f2 ? INF : -(q2.y - q1.y)/d2;
+    yn = f2 ? (is_almost_equal(x, q1.x) ? q1.y : false) : (q1.y - n*(x - q1.x));
+    if (false === ym || false === yn) return false;
+    return ym > yn ? [yn, ym] : [ym, yn];
+}*/
+function intersect(x1, y1, x2, y2, x3, y3, x4, y4)
+{
+    var a = y2 - y1, b = x1 - x2, c = x2*y1 - x1*y2,
+        k = y4 - y3, l = x3 - x4, m = x4*y3 - x3*y4,
         D = a*l - b*k;
     // zero, infinite or one point
-    return is_strictly_equal(D, 0) ? false : {x:(b*m - c*l)/D, y:(c*k - a*m)/D};
+    return is_almost_equal(D, 0) ? false : {x:(b*m - c*l)/D, y:(c*k - a*m)/D};
 }
 function fill_rect(set_pixel, x1, y1, x2, y2)
 {
-    // fill a rectangular area between (x1,y1), (x2,y2)
+    // fill a rectangular area between (x1,y1), (x2,y2) integer coords
     var x, y;
     if (x1 > x2)
     {
@@ -554,97 +661,126 @@ function fill_rect(set_pixel, x1, y1, x2, y2)
         }
     }
 }
-function wu_step_init(p)
+function wu_line(set_pixel, xs, ys, xe, ye, dx, dy)
 {
-    // initialize the step used in Wu's algorithm
-    p.dx = p.endx - p.x;
-    p.dy = p.endy - p.y;
-    p.sx = sign(p.dx);
-    p.sy = sign(p.dy);
-    p.dx = stdMath.abs(p.dx);
-    p.dy = stdMath.abs(p.dy);
+    if (null == dx)
+    {
+        dx = stdMath.abs(xe - xs);
+        dy = stdMath.abs(ye - ys);
+    }
 
-    var xs = stdMath.round(p.x),
-        ys = stdMath.round(p.y),
-        xe = stdMath.round(p.endx),
-        ye = stdMath.round(p.endy),
-        e = 0.5;
-
-    p.steep = p.dy > p.dx;
-    if (p.steep)
-    {
-        p.gradient = p.sx*(p.dy ? p.dx/p.dy : 1.0);
-        p.intersect = p.x + p.gradient;
-        p.gap1 = 1 - (p.y + e - ys);
-        p.gap2 = 1 - (p.endy + e - ye);
-        p.fpart = p.x - xs;
-        p.rfpart = 1 - p.fpart;
-        p.end = function() {return p.y === p.endy;};
-    }
-    else
-    {
-        p.gradient = p.sy*(p.dx ? p.dy/p.dx : 1.0);
-        p.intersect = p.y + p.gradient;
-        p.gap1 = 1 - (p.x + e - xs);
-        p.gap2 = 1 - (p.endx + e - xe);
-        p.fpart = p.y - ys;
-        p.rfpart = 1 - p.fpart;
-        p.end = function() {return p.x === p.endx;};
-    }
-    p.x = xs;
-    p.y = ys;
-    p.endx = xe;
-    p.endy = ye;
-    p.fpart *= p.gap1;
-    p.rfpart *= p.gap1;
-    return p;
-}
-function wu_step(p)
-{
-    // the step method in Wu's algorithm
-    var i = stdMath.floor(p.intersect);
-    p.fpart = p.intersect - i;
-    p.rfpart = 1 - p.fpart;
-    if (p.steep)
-    {
-        p.y += p.sy;
-        if (p.y === p.endy)
-        {
-            p.x = p.endx;
-            p.fpart *= p.gap2;
-            p.rfpart *= p.gap2;
-        }
-        else
-        {
-            p.x = i;
-        }
-    }
-    else
-    {
-        p.x += p.sx;
-        if (p.x === p.endx)
-        {
-            p.y = p.endy;
-            p.fpart *= p.gap2;
-            p.rfpart *= p.gap2;
-        }
-        else
-        {
-            p.y = i;
-        }
-    }
-    p.intersect += p.gradient;
-}
-function wu_line(set_pixel, xs, ys, xe, ye)
-{
     // Wu's line algorithm
     // https://en.wikipedia.org/wiki/Xiaolin_Wu%27s_line_algorithm
-    var dx = xe - xs, dy = ye - ys, p, t;
-
-    if (0 === dx || 0 === dy)
+    if (is_strictly_equal(dx, 0) || is_strictly_equal(dy, 0))
     {
         return fill_rect(set_pixel, stdMath.round(xs), stdMath.round(ys), stdMath.round(xe), stdMath.round(ye));
     }
+
+    var x, y, xx, yy,
+        sx = 1, sy = 1,
+        gradient = 0, intersect = 0,
+        fpart = 0, rfpart = 0,
+        gap1 = 0, gap2 = 0,
+        i = 0, e = 0.5;
+
+    if (xs > xe)
+    {
+        x = xs;
+        xs = xe;
+        xe = x;
+        y = ys;
+        ys = ye;
+        ye = y;
+    }
+    sx = 1;
+    sy = ys > ye ? -1 : 1;
+
+    x = xs;
+    y = ys;
+    xx = xe;
+    yy = ye;
+
+    xs = stdMath.round(x);
+    ys = stdMath.round(y);
+    xe = stdMath.round(xx);
+    ye = stdMath.round(yy);
+
+    if (dy > dx)
+    {
+        gradient = sx*dx/dy;
+        intersect = x + gradient;
+        gap1 = 1 - (y + e - ys);
+        gap2 = 1 - (yy + e - ye);
+        fpart = x - xs;
+        rfpart = 1 - fpart;
+        x = xs;
+        y = ys;
+        fpart *= gap1;
+        rfpart *= gap1;
+        for (;;)
+        {
+            if (0 < rfpart) set_pixel(x, y, rfpart);
+            if (0 < fpart) set_pixel(x + 1, y, fpart);
+            if (y === ye) return;
+            i = stdMath.floor(intersect);
+            fpart = intersect - i;
+            rfpart = 1 - fpart;
+            y += sy;
+            if (y === ye)
+            {
+                x = xe;
+                fpart *= gap2;
+                rfpart *= gap2;
+            }
+            else
+            {
+                x = i;
+            }
+            intersect += gradient;
+        }
+    }
+    else
+    {
+        gradient = sy*dy/dx;
+        intersect = y + gradient;
+        gap1 = 1 - (x + e - xs);
+        gap2 = 1 - (xx + e - xe);
+        fpart = y - ys;
+        rfpart = 1 - fpart;
+        x = xs;
+        y = ys;
+        fpart *= gap1;
+        rfpart *= gap1;
+        for (;;)
+        {
+            if (0 < rfpart) set_pixel(x, y, rfpart);
+            if (0 < fpart) set_pixel(x, y + 1, fpart);
+            if (x === xe) return;
+            i = stdMath.floor(intersect);
+            fpart = intersect - i;
+            rfpart = 1 - fpart;
+            x += sx;
+            if (x === xe)
+            {
+                y = ye;
+                fpart *= gap2;
+                rfpart *= gap2;
+            }
+            else
+            {
+                y = i;
+            }
+            intersect += gradient;
+        }
+    }
+}
+function wu_thick_line(set_pixel, xs, ys, xe, ye, dx, dy, wx, wy, cs, ce)
+{
+    var t, xx, yy,
+        m, im, e = 0.5,
+        sx, sy, wsx, wsy,
+        a, b, c, d, g, f;
+
     if (xs > xe)
     {
         t = xs;
@@ -653,84 +789,27 @@ function wu_line(set_pixel, xs, ys, xe, ye)
         t = ys;
         ys = ye;
         ye = t;
-    }
-    p = wu_step_init({
-        x: xs,
-        y: ys,
-        endx: xe,
-        endy: ye
-    });
-    if (p.steep)
-    {
-        for (;;)
-        {
-            if (0 < p.rfpart) set_pixel(p.x, p.y, p.rfpart);
-            if (0 < p.fpart) set_pixel(p.x + 1, p.y, p.fpart);
-            if (p.end()) return;
-            wu_step(p);
-        }
-    }
-    else
-    {
-        for (;;)
-        {
-            if (0 < p.rfpart) set_pixel(p.x, p.y, p.rfpart);
-            if (0 < p.fpart) set_pixel(p.x, p.y + 1, p.fpart);
-            if (p.end()) return;
-            wu_step(p);
-        }
-    }
-}
-function wu_thick_line(set_pixel, xs, ys, xe, ye, w, cs, ce)
-{
-    if (1 >= w) return wu_line(set_pixel, xs, ys, xe, ye);
-
-    var l, r, t, xx, yy,
-        dx, dy, n, m, im, e = 0.5,
-        sx, sy, cos, sin,
-        wx, wy, wsx, wsy,
-        a, b, c, d, g, f;
-
-    if (xs > xe)
-    {
-        n = xs;
-        xs = xe;
-        xe = n;
-        n = ys;
-        ys = ye;
-        ye = n;
         t = cs;
         cs = ce;
         ce = t;
     }
 
-    dx = stdMath.abs(xe - xs);
-    dy = stdMath.abs(ye - ys);
     sx = 1;
     sy = ys > ye ? -1 : 1;
-    w -= 1;
 
-    if (0 === dx)
+    if (is_strictly_equal(dx, 0))
     {
-        if ('square' === cs) ys -= sy*w/2;
-        if ('square' === ce) ye += sy*w/2;
-        return fill_rect(set_pixel, stdMath.round(xs - w/2), stdMath.round(ys), stdMath.round(xe + w/2), stdMath.round(ye));
-        return;
+        if ('square' === cs) ys -= sy*wx;
+        if ('square' === ce) ye += sy*wx;
+        return fill_rect(set_pixel, stdMath.round(xs - wx), stdMath.round(ys), stdMath.round(xs + wx), stdMath.round(ye));
     }
-    if (0 === dy)
+    if (is_strictly_equal(dy, 0))
     {
-        if ('square' === cs) xs -= sx*w/2;
-        if ('square' === ce) xe += sx*w/2;
-        return fill_rect(set_pixel, stdMath.round(xs), stdMath.round(ys - w/2), stdMath.round(xe), stdMath.round(ye + w/2));
+        if ('square' === cs) xs -= sx*wy;
+        if ('square' === ce) xe += sx*wy;
+        return fill_rect(set_pixel, stdMath.round(xs), stdMath.round(ys - wy), stdMath.round(xe), stdMath.round(ys + wy));
     }
 
-    n = hypot(dx, dy);
-    m = dy/dx;
-    cos = dy/n;
-    sin = dx/n;
-    wx = cos*w/2;
-    wy = sin*w/2;
-    im = 1/m;// = wy/wx, being the vertical direction to m
     wsx = sx*wx;
     wsy = sy*wy;
     if ('square' === cs) {xs -= sx*wy; ys -= sy*wx;}
@@ -759,17 +838,16 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
     b = {x:xs + wsx, y:ys - wsy};
     c = {x:xe - wsx, y:ye + wsy};
     d = {x:xe + wsx, y:ye - wsy};
-    f = {x:xs + 2*wsy/m + wsx, y:ys + wsy};
-    g = {x:xe - 2*wsy/m - wsx, y:ye - wsy};
+    f = {x:xs + 2*wsy*dx/dy + wsx, y:ys + wsy};
+    g = {x:xe - 2*wsy*dx/dy - wsx, y:ye - wsy};
+    m = sy*dy/dx;
+    im = sy*dx/dy;
 
     // outline
     wu_line(set_pixel, a.x, a.y, b.x, b.y);
     wu_line(set_pixel, b.x, b.y, d.x, d.y);
     wu_line(set_pixel, d.x, d.y, c.x, c.y);
     wu_line(set_pixel, c.x, c.y, a.x, a.y);
-
-    m *= sy;
-    im *= sy;
 
     // fill
     if (dy > dx)
@@ -827,104 +905,127 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
         }
     }
 }
-function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, w, j)
+function fill_triangle(set_pixel, a, b, c)
 {
-    var dx1 = stdMath.abs(x2 - x1), dy1 = stdMath.abs(y2 - y1),
-        dx2 = stdMath.abs(x3 - x2), dy2 = stdMath.abs(y3 - y2),
-        sx1, sy1, sx2, sy2,
-        n1, n2, m1, m2, im1, im2,
-        cos1, sin1, cos2, sin2,
-        wx1, wy1, wx2, wy2,
+    var y, yb, yc, xx, t, e = 0.5;
+    if (b.y < a.y) {t = a; a = b; b = t;}
+    if (c.y < a.y) {t = a; a = c; c = t;}
+    if (c.y < b.y) {t = b; b = c; c = t;}
+    for (y=stdMath.round(a.y)+1,yb = stdMath.round(b.y),yc=stdMath.round(c.y); y<yc; ++y)
+    {
+        xx = y < yb ? intersect_x2(y, a, c, a, b) : intersect_x2(y, a, c, b, c);
+        fill_rect(set_pixel, stdMath.round(xx[0] + e), y, stdMath.round(xx[1] - e), y);
+    }
+}
+function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, dy2, wx2, wy2, j)
+{
+    if (is_almost_equal(dy1*dx2, dy2*dx1)) return;
+
+    var sx1, sy1, sx2, sy2,
         wsx1, wsy1, wsx2, wsy2,
         a1, b1, c1, d1,
         a2, b2, c2, d2,
-        x, y, xx, yy, p, q, e = 0.5;
+        p, q, t, s;
 
-    if (is_almost_equal(dy1*dx2, dy2*dx1)) return;
+    if (x1 > x2 && x2 > x3)
+    {
+        t = x1;
+        x1 = x3;
+        x3 = t;
+        t = y1;
+        y1 = y3;
+        y3 = t;
+        t = dx1;
+        dx1 = dx2;
+        dx2 = t;
+        t = dy1;
+        dy1 = dy2;
+        dy2 = t;
+        t = wx1;
+        wx1 = wx2;
+        wx2 = t;
+        t = wy1;
+        wy1 = wy2;
+        wy2 = t;
+    }
 
-    w -= 1;
     sx1 = x1 > x2 ? -1 : 1;
     sy1 = y1 > y2 ? -1 : 1;
     sx2 = x2 > x3 ? -1 : 1;
     sy2 = y2 > y3 ? -1 : 1;
-    if (0 === dx1)
-    {
-        n1 = dy1;
-        m1 = 1;
-        cos1 = 0;
-        sin1 = 1;
-        im1 = 0;
-    }
-    else
-    {
-        n1 = hypot(dx1, dy1);
-        m1 = dy1/dx1;
-        cos1 = dy1/n1;
-        sin1 = dx1/n1;
-        im1 = 1/m1;
-    }
-    wx1 = cos1*w/2;
-    wy1 = sin1*w/2;
     wsx1 = sx1*wx1;
     wsy1 = sy1*wy1;
-    if (0 === dx2)
-    {
-        n2 = dy2;
-        m2 = 1;
-        cos2 = 0;
-        sin2 = 1;
-        im2 = 0;
-    }
-    else
-    {
-        n2 = hypot(dx2, dy2);
-        m2 = dy2/dx2;
-        cos2 = dy2/n2;
-        sin2 = dx2/n2;
-        im2 = 1/m2;
-    }
-    wx2 = cos2*w/2;
-    wy2 = sin2*w/2;
     wsx2 = sx2*wx2;
     wsy2 = sy2*wy2;
-
     a1 = {x:x1 - wsx1, y:y1 + wsy1};
     b1 = {x:x1 + wsx1, y:y1 - wsy1};
     c1 = {x:x2 - wsx1, y:y2 + wsy1};
     d1 = {x:x2 + wsx1, y:y2 - wsy1};
-
     a2 = {x:x2 - wsx2, y:y2 + wsy2};
     b2 = {x:x2 + wsx2, y:y2 - wsy2};
     c2 = {x:x3 - wsx2, y:y3 + wsy2};
     d2 = {x:x3 + wsx2, y:y3 - wsy2};
+    s = {x:x2, y:y2};
 
-    if ('bevel' === j)
+    if (sx1 === sx2)
     {
-        wu_line(set_pixel, c1.x, c1.y, a2.x, a2.y);
-        for (y=stdMath.round(y2),yy=stdMath.round(stdMath.max(c1.y, a2.y)); y<=yy; ++y)
+        if (sy1 === sy2)
         {
-            xx = intersect_x(y, im1, c1, im2, a2);
-            if (p = intersect({x:xx[0], y:y}, {x:xx[1], y:y}, c1, a2))
+            if (0 === dy1)
             {
-                xx[0] = stdMath.max(p.x, xx[0]);
-                xx[1] = stdMath.max(p.x, xx[1]);
+                p = d1;
+                q = b2;
             }
-            fill_rect(set_pixel, stdMath.round(xx[0] + e), y, stdMath.round(xx[1] - e), y);
+            else
+            {
+                p = c1;
+                q = a2;
+            }
+        }
+        else
+        {
+            p = c1;
+            q = b2;
         }
     }
-    else if ('miter' === j)
+    else //if (sx1 !== sx2)
     {
-        q = intersect(a1, c1, a2, c2)
-        wu_line(set_pixel, c1.x, c1.y, q.x, q.y);
-        wu_line(set_pixel, a2.x, a2.y, q.x, q.y);
-        for (y=stdMath.round(y2),yy=stdMath.round(stdMath.max(c1.y, a2.y, q.y)); y<=yy; ++y)
+        p = d1;
+        q = a2;
+    }
+    if ('bevel' === j)
+    {
+        wu_line(set_pixel, p.x, p.y, q.x, q.y);
+        fill_triangle(set_pixel, s, p, q);
+    }
+    if ('miter' === j)
+    {
+        if (sx1 === sx2)
         {
-            xx = intersect_x(y, -m1, q, m2, q);
-            p = intersect_x(y, im1, c1, -im2, a2);
-            xx[0] = stdMath.max(xx[0], p[0]);
-            xx[1] = stdMath.min(xx[1], p[1]);
-            fill_rect(set_pixel, stdMath.round(xx[0] + e), y, stdMath.round(xx[1] - e), y);
+            if (sy1 === sy2)
+            {
+                if (0 === dy1)
+                {
+                    t = intersect(b1.x, b1.y, d1.x, d1.y, b2.x, b2.y, d2.x, d2.y);
+                }
+                else
+                {
+                    t = intersect(a1.x, a1.y, c1.x, c1.y, a2.x, a2.y, c2.x, c2.y);
+                }
+            }
+            else
+            {
+                t = intersect(a1.x, a1.y, c1.x, c1.y, b2.x, b2.y, d2.x, d2.y);
+            }
         }
+        else //if (sx1 !== sx2)
+        {
+            t = intersect(b1.x, b1.y, d1.x, d1.y, a2.x, a2.y, c2.x, c2.y);
+        }
+        wu_line(set_pixel, p.x, p.y, t.x, t.y);
+        wu_line(set_pixel, q.x, q.y, t.x, t.y);
+        fill_triangle(set_pixel, s, p, q);
+        fill_triangle(set_pixel, t, p, q);
     }
 }
 function hypot(dx, dy)
@@ -967,10 +1068,11 @@ function sample_curve(f, n, pixelSize, do_refine)
 {
     if (null == n) n = NUM_POINTS;
     if (null == pixelSize) pixelSize = PIXEL_SIZE;
-    var i, points = [];
+    var i, p, points = [];
     if (do_refine)
     {
-        points.push(f(0));
+        p = f(0);
+        points.push(p.x, p.y);
         for (i=0; i<n; ++i)
         {
             subdivide_curve(points, f, 0 === i ? 0 : i/n, n === i+1 ? 1 : (i+1)/n, pixelSize, null, null);
@@ -980,7 +1082,8 @@ function sample_curve(f, n, pixelSize, do_refine)
     {
         for (i=0; i<=n; ++i)
         {
-            points.push(f(0 === i ? 0 : (n === i ? 1 : i/n)));
+            p = f(0 === i ? 0 : (n === i ? 1 : i/n));
+            points.push(p.x, p.y);
         }
     }
     return points;
@@ -993,7 +1096,7 @@ function subdivide_curve(points, f, l, r, pixelSize, pl, pr)
     {
         // no more refinement
         // return linear interpolation between left and right
-        points.push(right);
+        points.push(right.x, right.y);
     }
     else
     {

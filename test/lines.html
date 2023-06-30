@@ -10,44 +10,16 @@ body {
     font-family: Arial, san-serif;
     background: white;
 }
-#container {
-    position: relative;
-    width: 100%;
-    height: 1000px;
-    padding: 0;
-    margin: 0 auto;
-    overflow: visible;
-}
-.button {
-    position: relative;
-    display: inline-block;
-    padding: 8px 12px;
-    background: white;
-    color: black;
-    border: 1px solid #676767;
-    border-radius: 8px;
-    cursor: pointer;
-    margin: 1px;
-    margin-right: 10px;
-}
-.button:hover {
-    border-width: 2px;
-    margin: 0;
-    margin-right: 9px;
-}
 .canvas {
+    position: relative;
     display: inline-block;
     width: 200px;
-    height: 200px;
     margin-right: 10px
-    margin-bottom: 10px;
 }
 canvas {
     position: relative;
     display: block;
-    width: 200px;
-    height: 200px;
-    margin: 0px
+    margin: 5px auto;
 }
 h4 {
     display: block;
@@ -55,14 +27,11 @@ h4 {
 </style>
 </head><body>
 <h1>Rasterizer <span id="ver"></span> Lines / Curves</h1>
-<div id="container">
-<h4>Thick Lines:</h4>
-<div class="canvas">
-<b>Canvas:</b>
-<canvas id="test11" width="200" height="200"></canvas></div>
-<div class="canvas">
-<b>Rasterizer:</b>
-<canvas id="test12" width="200" height="200"></canvas></div>
+<div id="test1" class="canvas">
+<b>Canvas:</b><br/>
+</div>
+<div id="test2" class="canvas">
+<b>Rasterizer:</b><br/>
 </div>
 <script src="./Gradient.js"></script>
 <script src="../src/Rasterizer.js"></script>
@@ -71,8 +40,16 @@ h4 {
 "use strict";
 document.getElementById('ver').textContent = 'v.'+Rasterizer.VERSION;
 
-const w = 200, h = 200;
+const w = 200, h = 200,
+    test1 = document.getElementById('test1'),
+    test2 = document.getElementById('test2');
 
+function text(str, tag)
+{
+    var el = document.createElement(tag || 'span');
+    el.textContent = String(str);
+    return el;
+}
 function addColorStops(gradient)
 {
     ([0.0, 0.33, 0.66, 1.0]).forEach((s, i) => {
@@ -80,20 +57,32 @@ function addColorStops(gradient)
     });
     return gradient;
 }
-function drawLine(x1, y1, x2, y2, lw, ld, lc, lj)
+function drawLine(x1, y1, x2, y2, lw, ld, lc)
 {
-    const canvas1 = document.getElementById('test11');
-    const canvas2 = document.getElementById('test12');
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+    test1.appendChild(text(1 < lw ? 'Thick Line' : 'Line'));
+    test2.appendChild(text(1 < lw ? 'Thick Line' : 'Line'));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+    
     const ctx1 = canvas1.getContext("2d");
     const ctx2 = canvas2.getContext("2d");
 
-    lj = lj || 'miter';//'bevel';//'round';
     lc = lc || 'butt';//'square';//'round';
     ld = ld || [];
+    lw = lw || 1;
     ctx1.beginPath();
     ctx1.strokeStyle = '#000';
     ctx1.lineCap = lc;
-    ctx1.lineJoin = lj;
     ctx1.lineWidth = lw;
     ctx1.setLineDash(ld);
     ctx1.moveTo(x1, y1);
@@ -101,28 +90,38 @@ function drawLine(x1, y1, x2, y2, lw, ld, lc, lj)
     ctx1.stroke();
 
     const imData = ctx2.getImageData(0, 0, w, h);
-    const r = Rasterizer(
-        w, h,
-        Rasterizer.setRGBATo(imData)
-    );
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
     r.strokeStyle = [0,0,0];
     r.lineCap = lc;
-    r.lineJoin = lj;
     r.lineWidth = lw;
     r.setLineDash(ld);
-    r.drawLine(x1, y1, x2, y2);
+    r.strokePolyline(x1, y1, x2, y2);
     ctx2.putImageData(imData, 0, 0);
 }
-function drawLines(x1, y1, x2, y2, x3, y3, lw, ld, lc, lj)
+function drawPolyline(x1, y1, x2, y2, x3, y3, lw, ld, lc, lj)
 {
-    const canvas1 = document.getElementById('test11');
-    const canvas2 = document.getElementById('test12');
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+    test1.appendChild(text((1 < lw ? 'Thick PolyLine' : 'PolyLine')+' '+lj));
+    test2.appendChild(text((1 < lw ? 'Thick PolyLine' : 'PolyLine')+' '+lj));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+    
     const ctx1 = canvas1.getContext("2d");
     const ctx2 = canvas2.getContext("2d");
 
     lj = lj || 'miter';//'bevel';//'round';
     lc = lc || 'butt';//'square';//'round';
     ld = ld || [];
+    lw = lw || 1;
     ctx1.beginPath();
     ctx1.strokeStyle = '#000';
     ctx1.lineCap = lc;
@@ -135,34 +134,43 @@ function drawLines(x1, y1, x2, y2, x3, y3, lw, ld, lc, lj)
     ctx1.stroke();
 
     const imData = ctx2.getImageData(0, 0, w, h);
-    const r = Rasterizer(
-        w, h,
-        Rasterizer.setRGBATo(imData)
-    );
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
     r.strokeStyle = [0,0,0];
     r.lineCap = lc;
     r.lineJoin = lj;
     r.lineWidth = lw;
     r.setLineDash(ld);
-    r.drawLine(x1, y1, x2, y2);
-    r.drawLine(x2, y2, x3, y3);
-    r.joinLines(x1, y1, x2, y2, x3, y3);
+    r.strokePolyline(x1, y1, x2, y2, x3, y3);
     ctx2.putImageData(imData, 0, 0);
 }
-function drawGradientLine(x1, y1, x2, y2, lw, ld, lc, lj, grad1, grad2)
+function drawGradientLine(x1, y1, x2, y2, lw, ld, lc)
 {
-    const canvas1 = document.getElementById('test11');
-    const canvas2 = document.getElementById('test12');
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+    test1.appendChild(text((1 < lw ? 'Thick Gradient Line' : 'Gradient Line')));
+    test2.appendChild(text((1 < lw ? 'Thick Gradient Line' : 'Gradient Line')));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+    
     const ctx1 = canvas1.getContext("2d");
     const ctx2 = canvas2.getContext("2d");
+    const grad1 = addColorStops(ctx1.createLinearGradient(20, 20, 180, 180));
+    const grad2 = addColorStops(Gradient.createLinearGradient(20, 20, 180, 180));
 
-    lj = lj || 'miter';//'bevel';//'round';
     lc = lc || 'butt';//'square';//'round';
     ld = ld || [];
+    lw = lw || 1;
     ctx1.beginPath();
     ctx1.strokeStyle = grad1;
     ctx1.lineCap = lc;
-    ctx1.lineJoin = lj;
     ctx1.lineWidth = lw;
     ctx1.setLineDash(ld);
     ctx1.moveTo(x1, y1);
@@ -170,25 +178,35 @@ function drawGradientLine(x1, y1, x2, y2, lw, ld, lc, lj, grad1, grad2)
     ctx1.stroke();
 
     const imData = ctx2.getImageData(0, 0, w, h);
-    const r = Rasterizer(
-        w, h,
-        Rasterizer.setRGBATo(imData)
-    );
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
     r.strokeStyle = grad2.getColorAt.bind(grad2);
     r.lineCap = lc;
-    r.lineJoin = lj;
     r.lineWidth = lw;
     r.setLineDash(ld);
-    r.drawLine(x1, y1, x2, y2);
+    r.strokePolyline(x1, y1, x2, y2);
     ctx2.putImageData(imData, 0, 0);
 }
-
-function drawGradientArc(cx, cy, rx, ry, a, t0, t1, fs, lw, ld, lc, grad1, grad2)
+function drawGradientArc(cx, cy, rx, ry, a, t0, t1, fs, lw, ld, lc)
 {
-    const canvas1 = document.getElementById('test11');
-    const canvas2 = document.getElementById('test12');
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+    test1.appendChild(text((1 < lw ? 'Thick Gradient Arc' : 'Gradient Arc')));
+    test2.appendChild(text((1 < lw ? 'Thick Gradient Arc' : 'Gradient Arc')));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+    
     const ctx1 = canvas1.getContext("2d");
     const ctx2 = canvas2.getContext("2d");
+    const grad1 = addColorStops(ctx1.createLinearGradient(20, 20, 180, 180));
+    const grad2 = addColorStops(Gradient.createLinearGradient(20, 20, 180, 180));
 
     lc = lc || 'butt';
     ld = ld || [];
@@ -201,23 +219,33 @@ function drawGradientArc(cx, cy, rx, ry, a, t0, t1, fs, lw, ld, lc, grad1, grad2
     ctx1.stroke();
 
     const imData = ctx2.getImageData(0, 0, w, h);
-    const r = Rasterizer(
-        w, h,
-        Rasterizer.setRGBATo(imData)
-    );
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
     r.strokeStyle = grad2.getColorAt.bind(grad2);
     r.lineCap = lc;
     r.lineWidth = lw;
     r.setLineDash(ld);
-    r.drawArc(cx, cy, rx, ry, a, t0, t1, fs);
+    r.strokeArc(cx, cy, rx, ry, a, t0, t1, fs);
     ctx2.putImageData(imData, 0, 0);
 }
-function drawGradientBezier(c, lw, ld, lc, grad1, grad2)
+/*function drawGradientBezier(c, lw, ld, lc)
 {
-    const canvas1 = document.getElementById('test11');
-    const canvas2 = document.getElementById('test12');
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = String(w)+'px';
+    canvas1.height = String(h)+'px';
+    canvas2.width = String(w)+'px';
+    canvas2.height = String(h)+'px';
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+
     const ctx1 = canvas1.getContext("2d");
     const ctx2 = canvas2.getContext("2d");
+    const grad1 = addColorStops(ctx1.createLinearGradient(20, 20, 180, 180));
+    const grad2 = addColorStops(Gradient.createLinearGradient(20, 20, 180, 180));
 
     lc = lc || 'butt';
     ld = ld || [];
@@ -226,28 +254,43 @@ function drawGradientBezier(c, lw, ld, lc, grad1, grad2)
     ctx1.lineCap = lc;
     ctx1.lineWidth = lw;
     ctx1.setLineDash(ld);
-    ctx1.moveTo(c[0].x, c[0].y);
-    ctx1.bezierCurveTo(c[1].x, c[1].y, c[2].x, c[2].y, c[3].x, c[3].y);
+    ctx1.moveTo(c[0], c[1]);
+    ctx1.bezierCurveTo(c[2], c[3], c[4], c[5], c[6], c[7]);
     ctx1.stroke();
 
     const imData = ctx2.getImageData(0, 0, w, h);
-    const r = Rasterizer(
-        w, h,
-        Rasterizer.setRGBATo(imData)
-    );
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
     r.strokeStyle = grad2.getColorAt.bind(grad2);
     r.lineCap = lc;
     r.lineWidth = lw;
     r.setLineDash(ld);
-    r.drawBezier(c);
+    r.strokeBezier.apply(r, c);
     ctx2.putImageData(imData, 0, 0);
-}
+}*/
 
-//drawLine(20, 20, 80, 100, 1, [1,1]);
-//drawLine(20, 20, 80, 100, 4, [5,20], 'butt');
-drawLines(20, 10, 40, 60, 80, 62, 20, [], 'butt', 'miter');
-//drawGradientLine(20, 20, 120, 80, 20, [], 'square', 'miter', addColorStops(document.getElementById('test11').getContext('2d').createLinearGradient(20, 20, w - 20, h - 20)), addColorStops(Gradient.createLinearGradient(20, 20, w - 20, h - 20)));
-//drawGradientArc(50, 50, 20, 40, 30*Math.PI/180, 1, Math.PI/2, false, 2, [], 'butt', addColorStops(document.getElementById('test11').getContext('2d').createLinearGradient(20, 20, w - 20, h - 20)), addColorStops(Gradient.createLinearGradient(20, 20, w - 20, h - 20)));
+drawLine(20, 20, 80, 100);
+drawGradientLine(20, 20, 120, 80, 20, [], 'square');
+drawPolyline(60, 20, 20, 20, 20, 60, 20, [], 'butt', 'bevel');
+drawPolyline(10, 10, 60, 10, 60, 60, 20, [], 'butt', 'bevel');
+drawPolyline(20, 10, 20, 60, 60, 60, 20, [], 'butt', 'bevel');
+drawPolyline(60, 10, 60, 60, 10, 60, 20, [], 'butt', 'bevel');
+drawPolyline(70, 70, 40, 60, 20, 10, 20, [], 'butt', 'bevel');
+drawPolyline(20, 10, 40, 60, 70, 70, 20, [], 'butt', 'bevel');
+drawPolyline(20, 10, 40, 60, 10, 70, 20, [], 'butt', 'bevel');
+drawPolyline(20, 70, 40, 10, 70, 60, 20, [], 'butt', 'bevel');
+drawPolyline(20, 10, 40, 70, 70, 20, 20, [], 'butt', 'bevel');
+drawPolyline(70, 20, 40, 70, 20, 10, 20, [], 'butt', 'bevel');
+drawPolyline(60, 20, 20, 20, 20, 60, 20, [], 'butt', 'miter');
+drawPolyline(10, 10, 60, 10, 60, 60, 20, [], 'butt', 'miter');
+drawPolyline(20, 10, 20, 60, 60, 60, 20, [], 'butt', 'miter');
+drawPolyline(60, 10, 60, 60, 10, 60, 20, [], 'butt', 'miter');
+drawPolyline(70, 70, 40, 60, 20, 10, 20, [], 'butt', 'miter');
+drawPolyline(20, 10, 40, 60, 70, 70, 20, [], 'butt', 'miter');
+drawPolyline(20, 10, 40, 60, 10, 70, 20, [], 'butt', 'miter');
+drawPolyline(20, 70, 40, 20, 70, 60, 20, [], 'butt', 'miter');
+drawPolyline(20, 10, 40, 70, 70, 20, 20, [], 'butt', 'miter');
+drawPolyline(70, 20, 40, 70, 20, 10, 20, [], 'butt', 'miter');
+drawGradientArc(50, 50, 20, 40, 30*Math.PI/180, 1, Math.PI/2, true, 2, [], 'butt');
 })();
 </script>
 </body></html>
