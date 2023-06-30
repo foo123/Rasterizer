@@ -611,60 +611,56 @@ function fill_rect(set_pixel, x1, y1, x2, y2)
     }
     if (y1 === y2)
     {
-        for (x=x1; x<=x2; ++x)
-        {
-            set_pixel(x, y1, 1);
-        }
+        for (x=x1; x<=x2; ++x) set_pixel(x, y1, 1);
     }
     else if (x1 === x2)
     {
-        for (y=y1; y<=y2; ++y)
-        {
-            set_pixel(x1, y, 1);
-        }
+        for (y=y1; y<=y2; ++y) set_pixel(x1, y, 1);
     }
     else
     {
         for (y=y1; y<=y2; ++y)
         {
-            for (x=x1; x<=x2; ++x)
-            {
-                set_pixel(x, y, 1);
-            }
+            for (x=x1; x<=x2; ++x) set_pixel(x, y, 1);
         }
     }
 }
 function fill_triangle(set_pixel, a, b, c, xmin, ymin, xmax, ymax)
 {
-    var y, yb, yc, x, xx, x1, x2, t, d, e = 0.5;
+    // fill the triangle defined by a, b, c points
+    var y, yb, yc, x, xx, t, d,
+        clip = null != xmin, e = 0.5;
     if (b.y < a.y) {t = a; a = b; b = t;}
     if (c.y < a.y) {t = a; a = c; c = t;}
     if (c.y < b.y) {t = b; b = c; c = t;}
-    for (y=stdMath.max(ymin, stdMath.round(a.y+1)),yb = stdMath.round(b.y),yc=stdMath.min(ymax+1, stdMath.round(c.y)); y<yc; ++y)
+    y = stdMath.round(a.y + e);
+    yb = stdMath.round(b.y);
+    yc = stdMath.round(c.y - e);
+    if (clip) {y = stdMath.max(ymin, y); yc = stdMath.min(ymax, yc);}
+    for (; y<=yc; ++y)
     {
-        //i = y < yb ? intersect_x2(y, a, c, a, b) : intersect_x2(y, a, c, b, c);
         d = c.x - a.x;
-        x1 = is_strictly_equal(d, 0) ? a.x : (d*(y - a.y)/(c.y - a.y) + a.x);
+        x = is_strictly_equal(d, 0) ? a.x : (d*(y - a.y)/(c.y - a.y) + a.x);
         if (y < yb)
         {
             d = b.x - a.x;
-            x2 = is_strictly_equal(d, 0) ? a.x : (d*(y - a.y)/(b.y - a.y) + a.x);
+            xx = is_strictly_equal(d, 0) ? a.x : (d*(y - a.y)/(b.y - a.y) + a.x);
         }
         else
         {
             d = c.x - b.x;
-            x2 = is_strictly_equal(d, 0) ? b.x : (d*(y - b.y)/(c.y - b.y) + b.x);
+            xx = is_strictly_equal(d, 0) ? b.x : (d*(y - b.y)/(c.y - b.y) + b.x);
         }
-        if (x2 < x1)
+        if (xx < x)
         {
-            t = x1;
-            x1 = x2;
-            x2 = t;
+            t = x;
+            x = xx;
+            xx = t;
         }
-        for (x=stdMath.max(xmin, stdMath.round(x1 + e)),xx=stdMath.min(xmax, stdMath.round(x2 - e)); x<=xx; ++x)
-        {
-            set_pixel(x, y, 1);
-        }
+        x = stdMath.round(x + e);
+        xx = stdMath.round(xx - e);
+        if (clip) {x = stdMath.max(xmin, x); xx = stdMath.min(xmax, xx);}
+        for (; x<=xx; ++x) set_pixel(x, y, 1);
     }
 }
 function wu_line(set_pixel, xs, ys, xe, ye, dx, dy)
@@ -675,13 +671,13 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy)
         dy = stdMath.abs(ye - ys);
     }
 
-    // Wu's line algorithm
-    // https://en.wikipedia.org/wiki/Xiaolin_Wu%27s_line_algorithm
     if (is_strictly_equal(dx, 0) || is_strictly_equal(dy, 0))
     {
         return fill_rect(set_pixel, stdMath.round(xs), stdMath.round(ys), stdMath.round(xe), stdMath.round(ye));
     }
 
+    // Wu's line algorithm
+    // https://en.wikipedia.org/wiki/Xiaolin_Wu%27s_line_algorithm
     var x, y, xx, yy,
         sx = 1, sy = 1,
         gradient = 0, intersect = 0,
@@ -783,9 +779,8 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy)
 function wu_thick_line(set_pixel, xs, ys, xe, ye, dx, dy, wx, wy, cs, ce)
 {
     var t, xx, yy,
-        m, im, e = 0.5,
         sx, sy, wsx, wsy,
-        a, b, c, d, g, f;
+        a, b, c, d;
 
     if (xs > xe)
     {
@@ -816,8 +811,6 @@ function wu_thick_line(set_pixel, xs, ys, xe, ye, dx, dy, wx, wy, cs, ce)
         return fill_rect(set_pixel, stdMath.round(xs), stdMath.round(ys - wy), stdMath.round(xe), stdMath.round(ys + wy));
     }
 
-    wsx = sx*wx;
-    wsy = sy*wy;
     if ('square' === cs) {xs -= sx*wy; ys -= sy*wx;}
     if ('square' === ce) {xe += sx*wy; ye += sy*wx;}
 
@@ -840,76 +833,23 @@ f: ys + wsy - (ys-wsy) = -m*(x - (xs+wsx)) => x = xs - 2wsy/m + wsx: (xs - 2wsy/
 g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/m - wsx, ye-wsy)
 */
 
+    wsx = sx*wx;
+    wsy = sy*wy;
+
     a = {x:xs - wsx, y:ys + wsy};
     b = {x:xs + wsx, y:ys - wsy};
     c = {x:xe - wsx, y:ye + wsy};
     d = {x:xe + wsx, y:ye - wsy};
-    f = {x:xs + 2*wsy*dx/dy + wsx, y:ys + wsy};
-    g = {x:xe - 2*wsy*dx/dy - wsx, y:ye - wsy};
-    m = sy*dy/dx;
-    im = sy*dx/dy;
-
+    //f = {x:xs + 2*wsy*dx/dy + wsx, y:ys + wsy};
+    //g = {x:xe - 2*wsy*dx/dy - wsx, y:ye - wsy};
     // outline
     wu_line(set_pixel, a.x, a.y, b.x, b.y);
     wu_line(set_pixel, b.x, b.y, d.x, d.y);
     wu_line(set_pixel, d.x, d.y, c.x, c.y);
     wu_line(set_pixel, c.x, c.y, a.x, a.y);
-
     // fill
-    if (dy > dx)
-    {
-        for (ys=stdMath.round(b.y)+sy,ye=stdMath.round(a.y); sy*(ye-ys)>0; ys+=sy)
-        {
-            xx = intersect_x(ys, im, b, -m, b);
-            if (0 < xx[1] - xx[0])
-            {
-                fill_rect(set_pixel, stdMath.round(xx[0] + e), ys, stdMath.round(xx[1] - e), ys);
-            }
-        }
-        for (ys=ye,ye=stdMath.round(g.y); sy*(ye-ys)>0; ys+=sy)
-        {
-            xx = intersect_x(ys, -m, c, -m, b);
-            if (0 < xx[1] - xx[0])
-            {
-                fill_rect(set_pixel, stdMath.round(xx[0] + e), ys, stdMath.round(xx[1] - e), ys);
-            }
-        }
-        for (ys=ye,ye=stdMath.round(c.y); sy*(ye-ys)>0; ys+=sy)
-        {
-            xx = intersect_x(ys, -m, c, im, c);
-            if (0 < xx[1] - xx[0])
-            {
-                fill_rect(set_pixel, stdMath.round(xx[0] + e), ys, stdMath.round(xx[1] - e), ys);
-            }
-        }
-    }
-    else
-    {
-        for (xs=stdMath.round(a.x)+1,xe=stdMath.round(b.x); xs<xe; ++xs)
-        {
-            yy = intersect_y(xs, im, a, -m, a);
-            if (0 < yy[1] - yy[0])
-            {
-                fill_rect(set_pixel, xs, stdMath.round(yy[0] + e), xs, stdMath.round(yy[1] - e));
-            }
-        }
-        for (xs=xe,xe=stdMath.round(c.x); xs<xe; ++xs)
-        {
-            yy = intersect_y(xs, -m, a, -m, d);
-            if (0 < yy[1] - yy[0])
-            {
-                fill_rect(set_pixel, xs, stdMath.round(yy[0] + e), xs, stdMath.round(yy[1] - e));
-            }
-        }
-        for (xs=xe,xe=stdMath.round(d.x); xs<xe; ++xs)
-        {
-            yy = intersect_y(xs, im, d, -m, d);
-            if (0 < yy[1] - yy[0])
-            {
-                fill_rect(set_pixel, xs, stdMath.round(yy[0] + e), xs, stdMath.round(yy[1] - e));
-            }
-        }
-    }
+    fill_triangle(set_pixel, a, b, c);
+    fill_triangle(set_pixel, b, c, d);
 }
 function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, dy2, wx2, wy2, j, xmin, ymin, xmax, ymax)
 {

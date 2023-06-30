@@ -4,18 +4,14 @@ Rasterize, draw and fill lines, rectangles and curves. Even without canvas.
 
 **version: 1.0.0** in progress
 
-**Thick Lines Demo:**
+**Test/Demo:**
 
-![thick lines demo](/thicklines.png)
+![line](/line.png)
 
-**`bevel` line join**
+![gradient thick line](/thicklines.png)
 
-![bevel line join](/joinbevel.png)
+![bevel polyline join](/joinbevel.png)
 
-**`miter` line join**
-
-![miter line join](/joinmiter.png)
-
-**arc**
+![miter polyline join](/joinmiter.png)
 
 ![gradient arc](/arc.png)

@@ -73,7 +73,7 @@ function drawLine(x1, y1, x2, y2, lw, ld, lc)
     test2.appendChild(text(1 < lw ? 'Thick Line' : 'Line'));
     test1.appendChild(canvas1);
     test2.appendChild(canvas2);
-    
+
     const ctx1 = canvas1.getContext("2d");
     const ctx2 = canvas2.getContext("2d");
 
@@ -114,7 +114,7 @@ function drawPolyline(x1, y1, x2, y2, x3, y3, lw, ld, lc, lj)
     test2.appendChild(text((1 < lw ? 'Thick PolyLine' : 'PolyLine')+' '+lj));
     test1.appendChild(canvas1);
     test2.appendChild(canvas2);
-    
+
     const ctx1 = canvas1.getContext("2d");
     const ctx2 = canvas2.getContext("2d");
 
@@ -159,7 +159,7 @@ function drawGradientLine(x1, y1, x2, y2, lw, ld, lc)
     test2.appendChild(text((1 < lw ? 'Thick Gradient Line' : 'Gradient Line')));
     test1.appendChild(canvas1);
     test2.appendChild(canvas2);
-    
+
     const ctx1 = canvas1.getContext("2d");
     const ctx2 = canvas2.getContext("2d");
     const grad1 = addColorStops(ctx1.createLinearGradient(20, 20, 180, 180));
@@ -202,7 +202,7 @@ function drawGradientArc(cx, cy, rx, ry, a, t0, t1, fs, lw, ld, lc)
     test2.appendChild(text((1 < lw ? 'Thick Gradient Arc' : 'Gradient Arc')));
     test1.appendChild(canvas1);
     test2.appendChild(canvas2);
-    
+
     const ctx1 = canvas1.getContext("2d");
     const ctx2 = canvas2.getContext("2d");
     const grad1 = addColorStops(ctx1.createLinearGradient(20, 20, 180, 180));
