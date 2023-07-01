@@ -231,10 +231,10 @@ function drawGradientBezier(c, lw, ld, lc)
 {
     const canvas1 = document.createElement('canvas');
     const canvas2 = document.createElement('canvas');
-    canvas1.width = String(w)+'px';
-    canvas1.height = String(h)+'px';
-    canvas2.width = String(w)+'px';
-    canvas2.height = String(h)+'px';
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
     canvas1.style.width = String(w)+'px';
     canvas1.style.height = String(h)+'px';
     canvas2.style.width = String(w)+'px';
@@ -293,7 +293,7 @@ drawPolyline(20, 70, 40, 20, 70, 60, 20, [], 'butt', 'miter');
 drawPolyline(20, 10, 40, 70, 70, 20, 20, [], 'butt', 'miter');
 drawPolyline(70, 20, 40, 70, 20, 10, 20, [], 'butt', 'miter');
 drawGradientArc(50, 50, 20, 40, 30*Math.PI/180, 1, Math.PI/2, true, 2, [], 'butt');
-drawGradientBezier([10, 10, 100, 100, 20, 100, 90, 10], 2, [], 'butt');
+drawGradientBezier([10, 10, 200, 100, 10, 100, 70, 10], 4, [], 'butt');
 })();
 </script>
 </body></html>

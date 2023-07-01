@@ -2,7 +2,7 @@
 *   Rasterizer
 *   rasterize, draw and fill lines, rectangles and curves
 *
-*   @version 0.9.1
+*   @version 0.9.2
 *   https://github.com/foo123/Rasterizer
 *
 **/
@@ -32,26 +32,36 @@ function Rasterizer(width, height, set_rgba_at)
 
     var get_stroke_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]),
         get_fill_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]),
-        canvas = new ImArray((width*height)),
+        canvas, canvas_reset, canvas_output,
         set_pixel, stroke_pixel, fill_pixel,
         lineCap = 'butt', lineJoin = 'miter',
         lineWidth = 1, lineDash = [];
 
+    canvas_reset = function canvas_reset() {
+        // sparse array/hash
+        canvas = {};
+    };
+    canvas_output = function canvas_output(set_pixel) {
+        for (var index in canvas)
+        {
+            index = +index;
+            set_pixel(index % width, ~~(index / width), canvas[index]);
+        }
+    };
     set_pixel = function set_pixel(x, y, i) {
         if (0 <= x && x < width && 0 <= y && y < height && 0 < i)
         {
-            var index = x + y*width, j = canvas[index];
-            i = clamp(stdMath.round(255*i), 0, 255);
+            var index = x + y*width, j = canvas[index] || 0;
             if (i > j) canvas[index] = i;
         }
     };
     stroke_pixel = function stroke_pixel(x, y, i) {
         var c = get_stroke_at(x, y), af = 3 < c.length ? c[3] : 1.0;
-        if (0 < af) set_rgba_at(x, y, c[0], c[1], c[2], af*i/255);
+        if (0 < af) set_rgba_at(x, y, c[0], c[1], c[2], af*i);
     };
     fill_pixel = function fill_pixel(x, y, i) {
         var c = get_fill_at(x, y), af = 3 < c.length ? c[3] : 1.0;
-        if (0 < af) set_rgba_at(x, y, c[0], c[1], c[2], af*i/255);
+        if (0 < af) set_rgba_at(x, y, c[0], c[1], c[2], af*i);
     };
 
     def(self, 'strokeStyle', {
@@ -138,27 +148,27 @@ function Rasterizer(width, height, set_rgba_at)
     self.strokeRect = function(x, y, w, h) {
         if (1 <= w && 1 <= h && 0 < lineWidth)
         {
-            canvas_reset(canvas);
+            canvas_reset();
             stroke_polyline(set_pixel, [x, y, x + w - 1, y, x + w - 1, y + h - 1, x, y + h - 1, x, y], lineWidth, lineDash, 'butt', 'miter', 0, 0, width - 1, height - 1);
-            canvas_output(canvas, width, height, stroke_pixel);
+            canvas_output(stroke_pixel);
         }
         return self;
     };
     self.fillRect = function(x, y, w, h) {
         if (1 <= w && 1 <= h)
         {
-            canvas_reset(canvas);
+            canvas_reset();
             fill_rectangular(set_pixel, x, y, x + w - 1, y + h - 1, 0, 0, width - 1, height - 1);
-            canvas_output(canvas, width, height, fill_pixel);
+            canvas_output(fill_pixel);
         }
         return self;
     };
     self.strokePolyline = function() {
         if (0 < lineWidth)
         {
-            canvas_reset(canvas);
+            canvas_reset();
             stroke_polyline(set_pixel, arguments, lineWidth, lineDash, lineCap, lineJoin, 0, 0, width - 1, height - 1);
-            canvas_output(canvas, width, height, stroke_pixel);
+            canvas_output(stroke_pixel);
         }
         return self;
     };
@@ -176,16 +186,16 @@ function Rasterizer(width, height, set_rgba_at)
                 t0 = start;
                 t1 = end;
             }
-            canvas_reset(canvas);
+            canvas_reset();
             stroke_arc(set_pixel, cx, cy, rx, ry, angle, t0, t1, lineWidth, lineDash, lineCap, 'bevel', 0, 0, width - 1, height - 1);
-            canvas_output(canvas, width, height, stroke_pixel);
+            canvas_output(stroke_pixel);
         }
         return self;
     };
     self.strokeBezier = function() {
         if (0 < lineWidth && 4 <= arguments.length)
         {
-            canvas_reset(canvas);
+            canvas_reset();
             if (4 === arguments.length)
             {
                 stroke_polyline(set_pixel, arguments, lineWidth, lineDash, lineCap, lineJoin, 0, 0, width - 1, height - 1);
@@ -194,12 +204,12 @@ function Rasterizer(width, height, set_rgba_at)
             {
                 stroke_bezier(set_pixel, arguments, lineWidth, lineDash, lineCap, 'bevel', 0, 0, width - 1, height - 1);
             }
-            canvas_output(canvas, width, height, stroke_pixel);
+            canvas_output(stroke_pixel);
         }
         return self;
     };
 }
-Rasterizer.VERSION = '0.9.1';
+Rasterizer.VERSION = '0.9.2';
 Rasterizer.prototype = {
     constructor: Rasterizer,
     strokeStyle: null,
@@ -232,7 +242,7 @@ Rasterizer.getRGBAFrom = function(RGBA) {
     }
     else
     {
-        var c = [RGBA[0], RGBA[1], RGBA[2], 3 < RGBA.length ? clamp(RGBA[3], 0, 1.0) : 1.0];
+        var c = [RGBA[0], RGBA[1], RGBA[2], 3 < RGBA.length ? RGBA[3] : 1.0];
         return function(x, y) {
             return c;
         };
@@ -891,26 +901,6 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
 // utilities -----------------------
 function NOOP() {}
 function err(msg) {throw new Error(msg);}
-function canvas_reset(canvas)
-{
-    if (canvas.fill)
-    {
-        canvas.fill(0);
-    }
-    else
-    {
-        for (var i=0,n=canvas.length; i<n; ++i) canvas[i] = 0;
-    }
-}
-function canvas_output(canvas, width, height, set_pixel)
-{
-    for (var i,x=0,y=0,index=0,n=canvas.length; index<n; ++index,++x)
-    {
-        if (x >= width) {x=0; ++y;}
-        i = canvas[index];
-        if (0 < i) set_pixel(x, y, i);
-    }
-}
 function clamp(x, min, max)
 {
     return stdMath.min(stdMath.max(x, min), max);
