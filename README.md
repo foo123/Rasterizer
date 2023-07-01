@@ -2,7 +2,7 @@
 
 Rasterize, draw and fill lines, rectangles and curves. Even without canvas.
 
-**version: 1.0.0** in progress
+**version: 0.9.0** in progress (9.5 kB minified)
 
 **Test/Demo:**
 
@@ -15,3 +15,6 @@ Rasterize, draw and fill lines, rectangles and curves. Even without canvas.
 ![miter polyline join](/joinmiter.png)
 
 ![gradient arc](/arc.png)
+
+![all tests](/all.png)
+
