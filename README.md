@@ -2,7 +2,7 @@
 
 Rasterize, draw and fill lines, rectangles and curves. Even without canvas.
 
-**version: 0.9.0** in progress (9.5 kB minified)
+**version: 0.9.1** (9 kB minified)
 
 **Test/Demo:**
 
