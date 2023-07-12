@@ -2,7 +2,7 @@
 *   Rasterizer
 *   rasterize, draw and fill lines, rectangles and curves
 *
-*   @version 0.9.2
+*   @version 0.9.3
 *   https://github.com/foo123/Rasterizer
 *
 **/
@@ -42,17 +42,17 @@ function Rasterizer(width, height, set_rgba_at)
         canvas = {};
     };
     canvas_output = function canvas_output(set_pixel) {
-        for (var index in canvas)
+        for (var idx in canvas)
         {
-            index = +index;
-            set_pixel(index % width, ~~(index / width), canvas[index]);
+            var i = canvas[idx], xy = /*+idx*/idx.split(',');
+            set_pixel(/*xy % width*/+xy[0], /*~~(xy / width)*/+xy[1], i);
         }
     };
     set_pixel = function set_pixel(x, y, i) {
         if (0 <= x && x < width && 0 <= y && y < height && 0 < i)
         {
-            var index = x + y*width, j = canvas[index] || 0;
-            if (i > j) canvas[index] = i;
+            var idx = String(x)+','+String(y)/*String(x + y*width)*/, j = canvas[idx] || 0;
+            if (i > j) canvas[idx] = i;
         }
     };
     stroke_pixel = function stroke_pixel(x, y, i) {
@@ -209,7 +209,7 @@ function Rasterizer(width, height, set_rgba_at)
         return self;
     };
 }
-Rasterizer.VERSION = '0.9.2';
+Rasterizer.VERSION = '0.9.3';
 Rasterizer.prototype = {
     constructor: Rasterizer,
     strokeStyle: null,
@@ -283,21 +283,7 @@ Rasterizer.setRGBATo = function(IMG) {
 
 function fill_rectangular(set_pixel, x1, y1, x2, y2, xmin, ymin, xmax, ymax)
 {
-    var xm = stdMath.min(x1, x2), xM = stdMath.max(x1, x2),
-        ym = stdMath.min(y1, y2), yM = stdMath.max(y1, y2);
-
-    // if rect is outside viewport return
-    if (!(xM > xmin && xm < xmax && yM > ymin && ym < ymax)) return;
-
-    // clip it to viewport if needed
-    if (xm < xmin || xM > xmax || ym < ymin || yM > ymax)
-    {
-        xm = stdMath.max(xm, xmin);
-        ym = stdMath.max(ym, ymin);
-        xM = stdMath.min(xM, xmax);
-        yM = stdMath.min(yM, ymax);
-    }
-    fill_rect(set_pixel, stdMath.round(xm), stdMath.round(ym), stdMath.round(xM), stdMath.round(yM));
+    fill_rect(set_pixel, stdMath.round(x1), stdMath.round(y1), stdMath.round(x2), stdMath.round(y2), xmin, ymin, xmax, ymax);
 }
 function stroke_polyline(set_pixel, points, lw, ld, lc, lj, xmin, ymin, xmax, ymax)
 {
@@ -342,31 +328,13 @@ function stroke_polyline(set_pixel, points, lw, ld, lc, lj, xmin, ymin, xmax, ym
 }
 function stroke_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, xmin, ymin, xmax, ymax)
 {
-    var xm = stdMath.min(x1, x2), xM = stdMath.max(x1, x2),
-        ym = stdMath.min(y1, y2), yM = stdMath.max(y1, y2);
-
-    // if line is outside viewport return
-    if (!(xM > xmin && xm < xmax && yM > ymin && ym < ymax)) return;
-
-    // clip it to viewport if needed
-    if (xm < xmin || xM > xmax || ym < ymin || yM > ymax)
-    {
-        var clipped = clip(x1, y1, x2, y2, xmin, ymin, xmax, ymax);
-        if (!clipped) return;
-        if (!is_almost_equal(x1, clipped[0]) || !is_almost_equal(y1, clipped[1])) c1 = null;
-        if (!is_almost_equal(x2, clipped[2]) || !is_almost_equal(y2, clipped[3])) c2 = null;
-        x1 = clipped[0];
-        y1 = clipped[1];
-        x2 = clipped[2];
-        y2 = clipped[3];
-    }
     if (0 === wx && 0 === wy)
     {
-        wu_line(set_pixel, x1, y1, x2, y2, dx, dy);
+        wu_line(set_pixel, x1, y1, x2, y2, dx, dy, xmin, ymin, xmax, ymax);
     }
     else
     {
-        wu_thick_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2);
+        wu_thick_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, xmin, ymin, xmax, ymax);
     }
 }
 function stroke_arc(set_pixel, cx, cy, rx, ry, a, t0, t1, lw, ld, lc, lj, xmin, ymin, xmax, ymax)
@@ -382,7 +350,7 @@ function stroke_arc(set_pixel, cx, cy, rx, ry, a, t0, t1, lw, ld, lc, lj, xmin, 
                 cy + sin*x + cos*y
             ];
         };
-    stroke_polyline(set_pixel, sample_curve(arc, NUM_POINTS, PIXEL_SIZE, true), lw, ld, 'butt', 'bevel', xmin, ymin, xmax, ymax);
+    stroke_polyline(set_pixel, sample_curve(arc, NUM_POINTS, PIXEL_SIZE, true), lw, ld, lc, 'bevel', xmin, ymin, xmax, ymax);
 }
 function stroke_bezier(set_pixel, c, lw, ld, lc, lj, xmin, ymin, xmax, ymax)
 {
@@ -493,7 +461,7 @@ function intersect(x1, y1, x2, y2, x3, y3, x4, y4)
     // zero, infinite or one point
     return is_almost_equal(D, 0) ? false : {x:(b*m - c*l)/D, y:(c*k - a*m)/D};
 }
-function fill_rect(set_pixel, x1, y1, x2, y2)
+function fill_rect(set_pixel, x1, y1, x2, y2, xmin, ymin, xmax, ymax)
 {
     // fill a rectangular area between (x1,y1), (x2,y2) integer coords
     var x, y;
@@ -508,6 +476,14 @@ function fill_rect(set_pixel, x1, y1, x2, y2)
         y = y1;
         y1 = y2;
         y2 = y;
+    }
+    if (null != xmin)
+    {
+        if (x2 < xmin || x1 > xmax || y2 < ymin || y1 > ymax) return;
+        x1 = stdMath.max(x1, xmin);
+        y1 = stdMath.max(y1, ymin);
+        x2 = stdMath.min(x2, xmax);
+        y2 = stdMath.min(y2, ymax);
     }
     if (y1 === y2)
     {
@@ -585,7 +561,11 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
                 xx = xbc*(y - by)/ybc + bx;
             }
         }
-        if (is_almost_equal(x, xx)) continue;
+        if (is_almost_equal(x, xx))
+        {
+            set_pixel(x, y, 1);
+            continue;
+        }
         if (xx < x)
         {
             t = x;
@@ -598,12 +578,29 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
         for (; x<=xx; ++x) set_pixel(x, y, 1);
     }
 }
-function wu_line(set_pixel, xs, ys, xe, ye, dx, dy)
+function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, xmin, ymin, xmax, ymax)
 {
+    var xm = stdMath.min(xs, xe), xM = stdMath.max(xs, xe),
+        ym = stdMath.min(ys, ye), yM = stdMath.max(ys, ye);
+
+    // if line is outside viewport return
+    if (xM < xmin || xm > xmax || yM < ymin || ym > ymax) return;
+
     if (null == dx)
     {
         dx = stdMath.abs(xe - xs);
         dy = stdMath.abs(ye - ys);
+    }
+
+    // clip it to viewport if needed
+    if (xm < xmin || xM > xmax || ym < ymin || yM > ymax)
+    {
+        var clipped = clip(xs, ys, xe, ye, xmin, ymin, xmax, ymax);
+        if (!clipped) return;
+        xs = clipped[0];
+        ys = clipped[1];
+        xe = clipped[2];
+        ye = clipped[3];
     }
 
     if (is_strictly_equal(dx, 0) || is_strictly_equal(dy, 0))
@@ -711,11 +708,12 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy)
         }
     }
 }
-function wu_thick_line(set_pixel, xs, ys, xe, ye, dx, dy, wx, wy, cs, ce)
+function wu_thick_line(set_pixel, xs, ys, xe, ye, dx, dy, wx, wy, cs, ce, xmin, ymin, xmax, ymax)
 {
     var t, sx, sy,
         wsx, wsy,
-        a, b, c, d;
+        xa, xb, xc, xd,
+        ya, yb, yc, yd;
 
     if (xs > xe)
     {
@@ -737,13 +735,13 @@ function wu_thick_line(set_pixel, xs, ys, xe, ye, dx, dy, wx, wy, cs, ce)
     {
         if ('square' === cs) ys -= sy*wx;
         if ('square' === ce) ye += sy*wx;
-        return fill_rect(set_pixel, stdMath.round(xs - wx), stdMath.round(ys), stdMath.round(xs + wx), stdMath.round(ye));
+        return fill_rect(set_pixel, stdMath.round(xs - wx), stdMath.round(ys), stdMath.round(xs + wx), stdMath.round(ye), xmin, ymin, xmax, ymax);
     }
     if (is_strictly_equal(dy, 0))
     {
         if ('square' === cs) xs -= sx*wy;
         if ('square' === ce) xe += sx*wy;
-        return fill_rect(set_pixel, stdMath.round(xs), stdMath.round(ys - wy), stdMath.round(xe), stdMath.round(ys + wy));
+        return fill_rect(set_pixel, stdMath.round(xs), stdMath.round(ys - wy), stdMath.round(xe), stdMath.round(ys + wy), xmin, ymin, xmax, ymax);
     }
 
     if ('square' === cs) {xs -= sx*wy; ys -= sy*wx;}
@@ -771,19 +769,23 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
     wsx = sx*wx;
     wsy = sy*wy;
 
-    a = {x:xs - wsx, y:ys + wsy};
-    b = {x:xs + wsx, y:ys - wsy};
-    c = {x:xe - wsx, y:ye + wsy};
-    d = {x:xe + wsx, y:ye - wsy};
+    xa = xs - wsx;
+    ya = ys + wsy;
+    xb = xs + wsx;
+    yb = ys - wsy;
+    xc = xe - wsx;
+    yc = ye + wsy;
+    xd = xe + wsx;
+    yd = ye - wsy;
 
     // outline
-    wu_line(set_pixel, a.x, a.y, b.x, b.y);
-    wu_line(set_pixel, b.x, b.y, d.x, d.y);
-    wu_line(set_pixel, d.x, d.y, c.x, c.y);
-    wu_line(set_pixel, c.x, c.y, a.x, a.y);
+    wu_line(set_pixel, xa, ya, xb, yb, null, null, xmin, ymin, xmax, ymax);
+    wu_line(set_pixel, xb, yb, xd, yd, null, null, xmin, ymin, xmax, ymax);
+    wu_line(set_pixel, xd, yd, xc, yc, null, null, xmin, ymin, xmax, ymax);
+    wu_line(set_pixel, xc, yc, xa, ya, null, null, xmin, ymin, xmax, ymax);
     // fill
-    fill_triangle(set_pixel, a.x, a.y, b.x, b.y, c.x, c.y);
-    fill_triangle(set_pixel, b.x, b.y, c.x, c.y, d.x, d.y);
+    fill_triangle(set_pixel, xa, ya, xb, yb, xc, yc, xmin, ymin, xmax, ymax);
+    fill_triangle(set_pixel, xb, yb, xc, yc, xd, yd, xmin, ymin, xmax, ymax);
 }
 function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, dy2, wx2, wy2, j, xmin, ymin, xmax, ymax)
 {
@@ -863,10 +865,10 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
     }
     if ('bevel' === j)
     {
-        wu_line(set_pixel, p.x, p.y, q.x, q.y);
+        wu_line(set_pixel, p.x, p.y, q.x, q.y, null, null, xmin, ymin, xmax, ymax);
         fill_triangle(set_pixel, s.x, s.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
     }
-    if ('miter' === j)
+    else if ('miter' === j)
     {
         if (sx1 === sx2)
         {
@@ -890,8 +892,8 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
         {
             t = intersect(b1.x, b1.y, d1.x, d1.y, a2.x, a2.y, c2.x, c2.y);
         }
-        wu_line(set_pixel, p.x, p.y, t.x, t.y);
-        wu_line(set_pixel, q.x, q.y, t.x, t.y);
+        wu_line(set_pixel, p.x, p.y, t.x, t.y, null, null, xmin, ymin, xmax, ymax);
+        wu_line(set_pixel, q.x, q.y, t.x, t.y, null, null, xmin, ymin, xmax, ymax);
         fill_triangle(set_pixel, s.x, s.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
         fill_triangle(set_pixel, t.x, t.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
     }
