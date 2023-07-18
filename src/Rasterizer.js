@@ -610,13 +610,30 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, xmin, ymin, xmax, ymax)
 
     // Wu's line algorithm
     // https://en.wikipedia.org/wiki/Xiaolin_Wu%27s_line_algorithm
-    var x, y, xx, yy,
-        sx = 1, sy = 1,
-        gradient = 0, intersect = 0,
-        fpart = 0, rfpart = 0,
-        gap1 = 0, gap2 = 0,
-        i = 0, e = 0.5;
+    var x, y,
+        x1, x2,
+        y1, y2,
+        xend, yend,
+        gradient = 0,
+        intersect = 0,
+        fpart = 0,
+        rfpart = 0,
+        gap = 0,
+        e = 0.5,
+        steep = dy > dx;
 
+    if (steep)
+    {
+        x = xs;
+        xs = ys;
+        ys = x;
+        x = xe;
+        xe = ye;
+        ye = x;
+        x = dx;
+        dx = dy;
+        dy = x;
+    }
     if (xs > xe)
     {
         x = xs;
@@ -626,76 +643,71 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, xmin, ymin, xmax, ymax)
         ys = ye;
         ye = y;
     }
-    sx = 1;
-    sy = ys > ye ? -1 : 1;
 
-    x = xs;
-    y = ys;
-    xx = xe;
-    yy = ye;
+    gradient = (ys > ye ? -1 : 1)*dy/dx;
 
-    xs = stdMath.round(x);
-    ys = stdMath.round(y);
-    xe = stdMath.round(xx);
-    ye = stdMath.round(yy);
-
-    if (dy > dx)
+    // handle first endpoint
+    xend = stdMath.round(xs);
+    yend = ys + gradient * (xend - xs);
+    gap = 1 - (xs + e - stdMath.floor(xs + e));
+    x1 = xend;
+    y1 = stdMath.floor(yend);
+    fpart = yend - y1;
+    rfpart = 1 - fpart;
+    if (steep)
     {
-        gradient = sx*dx/dy;
-        intersect = x + gradient;
-        gap1 = 1 - (y + e - ys);
-        gap2 = 1 - (yy + e - ye);
-        fpart = x - xs;
-        rfpart = 1 - fpart;
-        x = xs;
-        y = ys;
-        fpart *= gap1;
-        rfpart *= gap1;
-        for (;;)
+        set_pixel(y1, x1, rfpart*gap);
+        set_pixel(y1 + 1, x1, fpart*gap);
+    }
+    else
+    {
+        set_pixel(x1, y1, rfpart*gap);
+        set_pixel(x1, y1 + 1, fpart*gap);
+    }
+
+    intersect = yend + gradient;
+
+    // handle second endpoint
+    xend = stdMath.round(xe);
+    yend = ye + gradient * (xend - xe);
+    gap = xe + e - stdMath.floor(xe + e);
+    x2 = xend;
+    y2 = stdMath.floor(yend);
+    fpart = yend - y2;
+    rfpart = 1 - fpart;
+    if (steep)
+    {
+        set_pixel(y2, x2, rfpart*gap);
+        set_pixel(y2 + 1, x2, fpart*gap);
+    }
+    else
+    {
+        set_pixel(x2, y2, rfpart*gap);
+        set_pixel(x2, y2 + 1, fpart*gap);
+    }
+
+    // main loop
+    if (steep)
+    {
+        for (x=x1+1; x<x2; ++x)
         {
-            if (0 < rfpart) set_pixel(x, y, rfpart);
-            if (0 < fpart) set_pixel(x + 1, y, fpart);
-            if (sy*(yy - y) < 1) return;
-            i = stdMath.floor(intersect);
-            fpart = intersect - i;
+            y = stdMath.floor(intersect);
+            fpart = intersect - y;
             rfpart = 1 - fpart;
-            y += sy;
-            x = i;
-            if (sy*(yy - y) < 1)
-            {
-                fpart *= gap2;
-                rfpart *= gap2;
-            }
+            if (0 < rfpart) set_pixel(y, x, rfpart);
+            if (0 < fpart) set_pixel(y + 1, x, fpart);
             intersect += gradient;
         }
     }
     else
     {
-        gradient = sy*dy/dx;
-        intersect = y + gradient;
-        gap1 = 1 - (x + e - xs);
-        gap2 = 1 - (xx + e - xe);
-        fpart = y - ys;
-        rfpart = 1 - fpart;
-        x = xs;
-        y = ys;
-        fpart *= gap1;
-        rfpart *= gap1;
-        for (;;)
+        for (x=x1+1; x<x2; ++x)
         {
+            y = stdMath.floor(intersect);
+            fpart = intersect - y;
+            rfpart = 1 - fpart;
             if (0 < rfpart) set_pixel(x, y, rfpart);
             if (0 < fpart) set_pixel(x, y + 1, fpart);
-            if (xx - x < 1) return;
-            i = stdMath.floor(intersect);
-            fpart = intersect - i;
-            rfpart = 1 - fpart;
-            x += sx;
-            y = i;
-            if (xx - x < 1)
-            {
-                fpart *= gap2;
-                rfpart *= gap2;
-            }
             intersect += gradient;
         }
     }
