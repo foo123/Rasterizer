@@ -520,7 +520,7 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
         y = stdMath.round(ay);
         x = stdMath.round(stdMath.min(ax, bx, cx));
         xx = stdMath.round(stdMath.max(ax, bx, cx));
-        return fill_rect(set_pixel, x, y, xx, y);
+        return fill_rect(set_pixel, x, y, xx, y, xmin, ymin, xmax, ymax);
     }
     yab = by - ay;
     ybc = cy - by;
@@ -561,9 +561,9 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
                 xx = xbc*(y - by)/ybc + bx;
             }
         }
-        if (is_almost_equal(x, xx))
+        if (stdMath.abs(xx - x) < 1)
         {
-            set_pixel(x, y, 1);
+            if (!clip || (x >= xmin && x <= xmax)) set_pixel(stdMath.round(x), y, 1);
             continue;
         }
         if (xx < x)
@@ -655,20 +655,16 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, xmin, ymin, xmax, ymax)
         {
             if (0 < rfpart) set_pixel(x, y, rfpart);
             if (0 < fpart) set_pixel(x + 1, y, fpart);
-            if (y === ye) return;
+            if (sy*(yy - y) < 1) return;
             i = stdMath.floor(intersect);
             fpart = intersect - i;
             rfpart = 1 - fpart;
             y += sy;
-            if (y === ye)
+            x = i;
+            if (sy*(yy - y) < 1)
             {
-                x = xe;
                 fpart *= gap2;
                 rfpart *= gap2;
-            }
-            else
-            {
-                x = i;
             }
             intersect += gradient;
         }
@@ -689,20 +685,16 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, xmin, ymin, xmax, ymax)
         {
             if (0 < rfpart) set_pixel(x, y, rfpart);
             if (0 < fpart) set_pixel(x, y + 1, fpart);
-            if (x === xe) return;
+            if (xx - x < 1) return;
             i = stdMath.floor(intersect);
             fpart = intersect - i;
             rfpart = 1 - fpart;
             x += sx;
-            if (x === xe)
+            y = i;
+            if (xx - x < 1)
             {
-                y = ye;
                 fpart *= gap2;
                 rfpart *= gap2;
-            }
-            else
-            {
-                y = i;
             }
             intersect += gradient;
         }
@@ -841,7 +833,7 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
     {
         if (sy1 === sy2)
         {
-            if (0 === dy1)
+            if (is_strictly_equal(dy1, 0))
             {
                 p = d1;
                 q = b2;
@@ -874,7 +866,7 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
         {
             if (sy1 === sy2)
             {
-                if (0 === dy1)
+                if (is_strictly_equal(dy1, 0))
                 {
                     t = intersect(b1.x, b1.y, d1.x, d1.y, b2.x, b2.y, d2.x, d2.y);
                 }
