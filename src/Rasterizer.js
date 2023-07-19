@@ -2,7 +2,7 @@
 *   Rasterizer
 *   rasterize, draw and fill lines, rectangles and curves
 *
-*   @version 0.9.3
+*   @version 0.9.4
 *   https://github.com/foo123/Rasterizer
 *
 **/
@@ -22,7 +22,7 @@ else if (!(name in root)) /* Browser/WebWorker/.. */
 var def = Object.defineProperty,
     stdMath = Math, INF = Infinity, PI = stdMath.PI,
     EPS = 1e-6, sqrt2 = stdMath.sqrt(2),
-    NUM_POINTS = 20, PIXEL_SIZE = 1,
+    NUM_POINTS = 8, MIN_LEN = 2, PIXEL_SIZE = 1,
     ImArray = 'undefined' !== typeof Uint8ClampedArray ? Uint8ClampedArray : ('undefined' !== typeof Uint8Array ? Uint8Array : Array);
 
 function Rasterizer(width, height, set_rgba_at)
@@ -35,7 +35,7 @@ function Rasterizer(width, height, set_rgba_at)
         canvas, canvas_reset, canvas_output,
         set_pixel, stroke_pixel, fill_pixel,
         lineCap = 'butt', lineJoin = 'miter',
-        lineWidth = 1, lineDash = [];
+        lineWidth = 1, mult = 1, lineDash = [];
 
     canvas_reset = function canvas_reset() {
         // sparse array/hash
@@ -51,6 +51,7 @@ function Rasterizer(width, height, set_rgba_at)
     set_pixel = function set_pixel(x, y, i) {
         if (0 <= x && x < width && 0 <= y && y < height && 0 < i)
         {
+            i *= mult;
             var idx = String(x)+','+String(y)/*String(x + y*width)*/, j = canvas[idx] || 0;
             if (i > j) canvas[idx] = i;
         }
@@ -148,9 +149,12 @@ function Rasterizer(width, height, set_rgba_at)
     self.strokeRect = function(x, y, w, h) {
         if (1 <= w && 1 <= h && 0 < lineWidth)
         {
+            var m = mult;
+            if (1 > lineWidth) mult = lineWidth;
             canvas_reset();
             stroke_polyline(set_pixel, [x, y, x + w - 1, y, x + w - 1, y + h - 1, x, y + h - 1, x, y], lineWidth, lineDash, 'butt', 'miter', 0, 0, width - 1, height - 1);
             canvas_output(stroke_pixel);
+            mult = m;
         }
         return self;
     };
@@ -166,9 +170,12 @@ function Rasterizer(width, height, set_rgba_at)
     self.strokePolyline = function() {
         if (0 < lineWidth)
         {
+            var m = mult;
+            if (1 > lineWidth) mult = lineWidth;
             canvas_reset();
             stroke_polyline(set_pixel, arguments, lineWidth, lineDash, lineCap, lineJoin, 0, 0, width - 1, height - 1);
             canvas_output(stroke_pixel);
+            mult = m;
         }
         return self;
     };
@@ -186,15 +193,20 @@ function Rasterizer(width, height, set_rgba_at)
                 t0 = start;
                 t1 = end;
             }
+            var m = mult;
+            if (1 > lineWidth) mult = lineWidth;
             canvas_reset();
             stroke_arc(set_pixel, cx, cy, rx, ry, angle, t0, t1, lineWidth, lineDash, lineCap, 'bevel', 0, 0, width - 1, height - 1);
             canvas_output(stroke_pixel);
+            mult = m;
         }
         return self;
     };
     self.strokeBezier = function() {
         if (0 < lineWidth && 4 <= arguments.length)
         {
+            var m = mult;
+            if (1 > lineWidth) mult = lineWidth;
             canvas_reset();
             if (4 === arguments.length)
             {
@@ -205,11 +217,12 @@ function Rasterizer(width, height, set_rgba_at)
                 stroke_bezier(set_pixel, arguments, lineWidth, lineDash, lineCap, 'bevel', 0, 0, width - 1, height - 1);
             }
             canvas_output(stroke_pixel);
+            mult = m;
         }
         return self;
     };
 }
-Rasterizer.VERSION = '0.9.3';
+Rasterizer.VERSION = '0.9.4';
 Rasterizer.prototype = {
     constructor: Rasterizer,
     strokeStyle: null,
@@ -479,6 +492,7 @@ function fill_rect(set_pixel, x1, y1, x2, y2, xmin, ymin, xmax, ymax)
     }
     if (null != xmin)
     {
+        // if rect is outside viewport return
         if (x2 < xmin || x1 > xmax || y2 < ymin || y1 > ymax) return;
         x1 = stdMath.max(x1, xmin);
         y1 = stdMath.max(y1, ymin);
@@ -510,6 +524,13 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
         yac, yab, ybc,
         zab, zbc,
         clip = null != xmin, e = 0.5;
+    if (clip)
+    {
+        // if triangle is outside viewport return
+        if (stdMath.max(ax, bx, cx) < xmin || stdMath.min(ax, bx, cx) > xmax ||
+        stdMath.max(ay, by, cy) < ymin || stdMath.min(ay, by, cy) > ymax)
+            return;
+    }
     if (by < ay) {t = ay; ay = by; by = t; t = ax; ax = bx; bx = t;}
     if (cy < ay) {t = ay; ay = cy; cy = t; t = ax; ax = cx; cx = t;}
     if (cy < by) {t = by; by = cy; cy = t; t = bx; bx = cx; cx = t;}
@@ -793,6 +814,7 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
 }
 function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, dy2, wx2, wy2, j, xmin, ymin, xmax, ymax)
 {
+    if ('bevel' !== j && 'miter' !== j) return;
     if (is_almost_equal(dy1*dx2, dy2*dx1)) return;
 
     var sx1, sy1, sx2, sy2,
@@ -982,7 +1004,16 @@ function sample_curve(f, n, pixelSize, do_refine)
 function subdivide_curve(points, f, l, r, pixelSize, pl, pr)
 {
     if ((l >= r) || is_almost_equal(l, r)) return;
-    var m = (l + r) / 2, left = pl || f(l), right = pr || f(r), middle = f(m);
+    var left = pl || f(l), right = pr || f(r), m, middle;
+    if (hypot(right[0] - left[0], right[1] - left[1]) <= MIN_LEN)
+    {
+        // segment should have at least 2 pixels length
+        // return linear interpolation between left and right
+        points.push(right[0], right[1]);
+        return;
+    }
+    m = (l + r) / 2;
+    middle = f(m);
     if (point_line_distance(middle, left, right) <= pixelSize)
     {
         // no more refinement
