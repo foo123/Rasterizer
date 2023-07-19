@@ -2,7 +2,7 @@
 *   Rasterizer
 *   rasterize, draw and fill lines, rectangles and curves
 *
-*   @version 0.9.4
+*   @version 0.9.5
 *   https://github.com/foo123/Rasterizer
 *
 **/
@@ -22,7 +22,7 @@ else if (!(name in root)) /* Browser/WebWorker/.. */
 var def = Object.defineProperty,
     stdMath = Math, INF = Infinity, PI = stdMath.PI,
     EPS = 1e-6, sqrt2 = stdMath.sqrt(2),
-    NUM_POINTS = 8, MIN_LEN = 2, PIXEL_SIZE = 1,
+    NUM_POINTS = 8, MIN_LEN = 2*sqrt2, PIXEL_SIZE = 1,
     ImArray = 'undefined' !== typeof Uint8ClampedArray ? Uint8ClampedArray : ('undefined' !== typeof Uint8Array ? Uint8Array : Array);
 
 function Rasterizer(width, height, set_rgba_at)
@@ -32,38 +32,9 @@ function Rasterizer(width, height, set_rgba_at)
 
     var get_stroke_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]),
         get_fill_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]),
-        canvas, canvas_reset, canvas_output,
-        set_pixel, stroke_pixel, fill_pixel,
         lineCap = 'butt', lineJoin = 'miter',
-        lineWidth = 1, mult = 1, lineDash = [];
-
-    canvas_reset = function canvas_reset() {
-        // sparse array/hash
-        canvas = {};
-    };
-    canvas_output = function canvas_output(set_pixel) {
-        for (var idx in canvas)
-        {
-            var i = canvas[idx], xy = /*+idx*/idx.split(',');
-            set_pixel(/*xy % width*/+xy[0], /*~~(xy / width)*/+xy[1], i);
-        }
-    };
-    set_pixel = function set_pixel(x, y, i) {
-        if (0 <= x && x < width && 0 <= y && y < height && 0 < i)
-        {
-            i *= mult;
-            var idx = String(x)+','+String(y)/*String(x + y*width)*/, j = canvas[idx] || 0;
-            if (i > j) canvas[idx] = i;
-        }
-    };
-    stroke_pixel = function stroke_pixel(x, y, i) {
-        var c = get_stroke_at(x, y), af = 3 < c.length ? c[3] : 1.0;
-        if (0 < af) set_rgba_at(x, y, c[0], c[1], c[2], af*i);
-    };
-    fill_pixel = function fill_pixel(x, y, i) {
-        var c = get_fill_at(x, y), af = 3 < c.length ? c[3] : 1.0;
-        if (0 < af) set_rgba_at(x, y, c[0], c[1], c[2], af*i);
-    };
+        lineWidth = 1, lineDash = [],
+        paths = [new Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth, lineDash, lineCap, lineJoin)];
 
     def(self, 'strokeStyle', {
         get: function() {
@@ -71,18 +42,18 @@ function Rasterizer(width, height, set_rgba_at)
         },
         set: function(c) {
            get_stroke_at = Rasterizer.getRGBAFrom(c);
+           paths[paths.length-1].strokeStyle = get_stroke_at;
         }
     });
-
     def(self, 'fillStyle', {
         get: function() {
             return '';
         },
         set: function(c) {
            get_fill_at = Rasterizer.getRGBAFrom(c);
+           paths[paths.length-1].fillStyle = get_fill_at;
         }
     });
-
     def(self, 'lineWidth', {
         get: function() {
             return lineWidth;
@@ -91,11 +62,10 @@ function Rasterizer(width, height, set_rgba_at)
             lw = stdMath.abs((+lw) || 0);
             if (0 < lw)
             {
-                lineWidth = lw;
+                paths[paths.length-1].lineWidth = lineWidth = lw;
             }
         }
     });
-
     def(self, 'lineCap', {
         get: function() {
             return lineCap;
@@ -105,7 +75,7 @@ function Rasterizer(width, height, set_rgba_at)
             if (-1 !== ['butt','square'].indexOf(lc))
             {
                 // only 'butt' and 'square' lineCap supported
-                lineCap = lc;
+                paths[paths.length-1].lineCap = lineCap = lc;
             }
             else
             {
@@ -113,7 +83,6 @@ function Rasterizer(width, height, set_rgba_at)
             }
         }
     });
-
     def(self, 'lineJoin', {
         get: function() {
             return lineJoin;
@@ -123,7 +92,7 @@ function Rasterizer(width, height, set_rgba_at)
             if (-1 !== ['miter','bevel'].indexOf(lj))
             {
                 // only 'miter' and 'bevel' lineJoin supported
-                lineJoin = lj;
+                paths[paths.length-1].lineJoin = lineJoin = lj;
             }
             else
             {
@@ -131,7 +100,6 @@ function Rasterizer(width, height, set_rgba_at)
             }
         }
     });
-
     def(self, 'lineDash', {
         get: function() {
             return lineDash.slice();
@@ -139,7 +107,7 @@ function Rasterizer(width, height, set_rgba_at)
         set: function(ld) {
             ld = [].concat(ld);
             if (ld.length & 1) ld = ld.concat(ld);
-            lineDash = ld;
+            paths[paths.length-1].lineDash = lineDash = ld;
         }
     });
     self.setLineDash = function(ld) {
@@ -147,82 +115,42 @@ function Rasterizer(width, height, set_rgba_at)
     };
 
     self.strokeRect = function(x, y, w, h) {
-        if (1 <= w && 1 <= h && 0 < lineWidth)
-        {
-            var m = mult;
-            if (1 > lineWidth) mult = lineWidth;
-            canvas_reset();
-            stroke_polyline(set_pixel, [x, y, x + w - 1, y, x + w - 1, y + h - 1, x, y + h - 1, x, y], lineWidth, lineDash, 'butt', 'miter', 0, 0, width - 1, height - 1);
-            canvas_output(stroke_pixel);
-            mult = m;
-        }
-        return self;
+        paths[paths.length-1].strokeRect(x, y, w, h);
     };
     self.fillRect = function(x, y, w, h) {
-        if (1 <= w && 1 <= h)
-        {
-            canvas_reset();
-            fill_rectangular(set_pixel, x, y, x + w - 1, y + h - 1, 0, 0, width - 1, height - 1);
-            canvas_output(fill_pixel);
-        }
-        return self;
+        paths[paths.length-1].fillRect(x, y, w, h);
     };
-    self.strokePolyline = function() {
-        if (0 < lineWidth)
-        {
-            var m = mult;
-            if (1 > lineWidth) mult = lineWidth;
-            canvas_reset();
-            stroke_polyline(set_pixel, arguments, lineWidth, lineDash, lineCap, lineJoin, 0, 0, width - 1, height - 1);
-            canvas_output(stroke_pixel);
-            mult = m;
-        }
-        return self;
+    self.beginPath = function() {
+        paths.push(new Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth, lineDash, lineCap, lineJoin));
     };
-    self.strokeArc = function(cx, cy, rx, ry, angle, start, end, fs) {
-        if (0 < lineWidth)
-        {
-            var t0, t1;
-            if (fs)
-            {
-                t0 = -end - PI;
-                t1 = start;
-            }
-            else
-            {
-                t0 = start;
-                t1 = end;
-            }
-            var m = mult;
-            if (1 > lineWidth) mult = lineWidth;
-            canvas_reset();
-            stroke_arc(set_pixel, cx, cy, rx, ry, angle, t0, t1, lineWidth, lineDash, lineCap, 'bevel', 0, 0, width - 1, height - 1);
-            canvas_output(stroke_pixel);
-            mult = m;
-        }
-        return self;
+    self.closePath = function() {
+        paths[paths.length-1].closePath();
     };
-    self.strokeBezier = function() {
-        if (0 < lineWidth && 4 <= arguments.length)
-        {
-            var m = mult;
-            if (1 > lineWidth) mult = lineWidth;
-            canvas_reset();
-            if (4 === arguments.length)
-            {
-                stroke_polyline(set_pixel, arguments, lineWidth, lineDash, lineCap, lineJoin, 0, 0, width - 1, height - 1);
-            }
-            else
-            {
-                stroke_bezier(set_pixel, arguments, lineWidth, lineDash, lineCap, 'bevel', 0, 0, width - 1, height - 1);
-            }
-            canvas_output(stroke_pixel);
-            mult = m;
-        }
-        return self;
+    self.moveTo = function(x, y) {
+        paths[paths.length-1].moveTo(x, y);
+    };
+    self.lineTo = function(x, y) {
+        paths[paths.length-1].lineTo(x, y);
+    };
+    self.ellipse = function(cx, cy, rx, ry, angle, start, end, fs) {
+        paths[paths.length-1].ellipse(cx, cy, rx, ry, angle, start, end, fs);
+    };
+    self.quadraticCurveTo = function(x1, y1, x2, y2) {
+        paths[paths.length-1].quadraticCurveTo(x1, y1, x2, y2);
+    };
+    self.bezierCurveTo = function(x1, y1, x2, y2, x3, y3) {
+        paths[paths.length-1].bezierCurveTo(x1, y1, x2, y2, x3, y3);
+    };
+    self.stroke = function() {
+        paths.forEach(function(p) {p.stroke();});
+    };
+    self.fill = function(fillRule) {
+        fillRule = String(fillRule || 'nonzero').toLowerCase();
+        if (-1 === ['nonzero','evenodd'].indexOf(fillRule)) fillRule = 'nonzero';
+        paths.forEach(function(p) {p.fill(fillRule);});
     };
 }
-Rasterizer.VERSION = '0.9.4';
+Rasterizer.VERSION = '0.9.5';
 Rasterizer.prototype = {
     constructor: Rasterizer,
     strokeStyle: null,
@@ -234,9 +162,15 @@ Rasterizer.prototype = {
     setLineDash: null,
     strokeRect: null,
     fillRect: null,
-    strokePolyline: null,
-    strokeArc: null,
-    strokeBezier: null
+    beginPath: null,
+    closePath: null,
+    moveTo: null,
+    lineTo: null,
+    ellipse: null,
+    quadraticCurveTo: null,
+    bezierCurveTo: null,
+    stroke: null,
+    fill: null
 };
 Rasterizer.createImageData = function(width, height) {
     return {
@@ -294,10 +228,221 @@ Rasterizer.setRGBATo = function(IMG) {
     }
 };
 
-function fill_rectangular(set_pixel, x1, y1, x2, y2, xmin, ymin, xmax, ymax)
+function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth, lineDash, lineCap, lineJoin)
 {
-    fill_rect(set_pixel, stdMath.round(x1), stdMath.round(y1), stdMath.round(x2), stdMath.round(y2), xmin, ymin, xmax, ymax);
+    var self = this, d = [[0, 0]],
+        canvas, mult = 1, set_pixel,
+        canvas_reset, canvas_output,
+        stroke_pixel, fill_pixel;
+
+    lineWidth = lineWidth || 1;
+    lineDash = lineDash || [];
+    lineCap = lineCap || 'butt';
+    lineJoin = lineJoin || 'miter';
+
+    canvas_reset = function canvas_reset() {
+        // sparse array/hash
+        canvas = {};
+    };
+    canvas_output = function canvas_output(set_pixel) {
+        for (var idx in canvas)
+        {
+            var i = canvas[idx], xy = /*+idx*/idx.split(',');
+            set_pixel(/*xy % width*/+xy[0], /*~~(xy / width)*/+xy[1], i);
+        }
+    };
+    set_pixel = function set_pixel(x, y, i) {
+        if (0 <= x && x < width && 0 <= y && y < height && 0 < i)
+        {
+            i *= mult;
+            var idx = String(x)+','+String(y)/*String(x + y*width)*/, j = canvas[idx] || 0;
+            if (i > j) canvas[idx] = i;
+        }
+    };
+    stroke_pixel = function stroke_pixel(x, y, i) {
+        var c = get_stroke_at(x, y), af = 3 < c.length ? c[3] : 1.0;
+        if (0 < af) set_rgba_at(x, y, c[0], c[1], c[2], af*i);
+    };
+    fill_pixel = function fill_pixel(x, y, i) {
+        var c = get_fill_at(x, y), af = 3 < c.length ? c[3] : 1.0;
+        if (0 < af) set_rgba_at(x, y, c[0], c[1], c[2], af*i);
+    };
+    def(self, 'strokeStyle', {
+        get: function() {
+            return;
+        },
+        set: function(s) {
+            get_stroke_at = s;
+        }
+    });
+    def(self, 'fillStyle', {
+        get: function() {
+            return;
+        },
+        set: function(s) {
+            get_fill_at = s;
+        }
+    });
+    def(self, 'lineWidth', {
+        get: function() {
+            return lineWidth;
+        },
+        set: function(lw) {
+            lineWidth = lw;
+        }
+    });
+    def(self, 'lineCap', {
+        get: function() {
+            return lineCap;
+        },
+        set: function(lc) {
+            lineCap = lc;
+        }
+    });
+    def(self, 'lineJoin', {
+        get: function() {
+            return lineJoin;
+        },
+        set: function(lj) {
+            lineJoin = lj;
+        }
+    });
+    def(self, 'lineDash', {
+        get: function() {
+            return lineDash;
+        },
+        set: function(ld) {
+            lineDash = ld;
+        }
+    });
+    self.moveTo = function(x, y) {
+        d.push([x, y]);
+        return self;
+    };
+    self.lineTo = function(x, y) {
+        d[d.length-1].push(x, y);
+        return self;
+    };
+    self.ellipse = function(cx, cy, rx, ry, angle, start, end, fs) {
+        var t0, t1;
+        if (fs)
+        {
+            t0 = -end - PI;
+            t1 = start;
+        }
+        else
+        {
+            t0 = start;
+            t1 = end;
+        }
+        d.push(arc_points(cx, cy, rx, ry, angle, t0, t1));
+        d.push([0, 0]);
+        return self;
+    };
+    self.quadraticCurveTo = function(x1, y1, x2, y2) {
+        var yp = d[d.length-1].pop(), xp = d[d.length-1].pop();
+        d[d.length-1].push.apply(d[d.length-1], bezier_points([xp, yp, x1, y1, x2, y2]));
+        return self;
+    };
+    self.bezierCurveTo = function(x1, y1, x2, y2, x3, y3) {
+        var yp = d[d.length-1].pop(), xp = d[d.length-1].pop();
+        d[d.length-1].push.apply(d[d.length-1], bezier_points([xp, yp, x1, y1, x2, y2, x3, y3]));
+        return self;
+    };
+    self.closePath = function() {
+        d[d.length-1].push(d[d.length-1][0], d[d.length-1][1]);
+        d.push([0, 0]);
+        return self;
+    };
+    self.stroke = function() {
+        if (0 < lineWidth)
+        {
+            var m = mult, xmin = 0, ymin = 0, xmax = width - 1, ymax = height - 1;
+            if (1 > lineWidth) mult = lineWidth;
+            canvas_reset();
+            for (var i=0,n=d.length,p; i<n; ++i)
+            {
+                p = d[i];
+                if (p && (2 < p.length))
+                {
+                    stroke_polyline(set_pixel, p, lineWidth, lineDash, lineCap, lineJoin, xmin, ymin, xmax, ymax);
+                }
+            }
+            canvas_output(stroke_pixel);
+            mult = m;
+        }
+        return self;
+    };
+    self.fill = function(fillRule) {
+        if ('evenodd' === fillRule)
+        {
+            var xmin = 0, ymin = 0, xmax = width - 1, ymax = height - 1;
+            canvas_reset();
+            for (var i=0,n=d.length,p; i<n; ++i)
+            {
+                p = d[i];
+                if (p && (2 < p.length))
+                {
+                    stroke_polyline(set_pixel, p, 1, [], 'butt', 'bevel', xmin, ymin, xmax, ymax);
+                }
+            }
+            evenodd_fill(set_pixel, path_to_segments(d).sort(asc), xmin, ymin, xmax, ymax);
+            canvas_output(fill_pixel);
+        }
+        return self;
+    };
+    self.strokeRect = function(x, y, w, h) {
+        if (1 <= w && 1 <= h && 0 < lineWidth)
+        {
+            var m = mult;
+            if (1 > lineWidth) mult = lineWidth;
+            canvas_reset();
+            stroke_polyline(set_pixel, [
+            x, y,
+            x + w - 1, y,
+            x + w - 1, y + h - 1,
+            x, y + h - 1,
+            x, y
+            ], lineWidth, lineDash, lineCap, lineJoin, 0, 0, width - 1, height - 1);
+            canvas_output(stroke_pixel);
+            mult = m;
+        }
+    };
+    self.fillRect = function(x, y, w, h) {
+        if (1 <= w && 1 <= h)
+        {
+            canvas_reset();
+            fill_rect(set_pixel, stdMath.round(x), stdMath.round(y), stdMath.round(x + w - 1), stdMath.round(y + h - 1), 0, 0, width - 1, height - 1);
+            canvas_output(fill_pixel);
+        }
+        return self;
+    };
+    self.dispose = function() {
+        d = null;
+    };
 }
+Path.prototype = {
+    constructor: Path,
+    dispose: null,
+    strokeStyle: null,
+    fillStyle: null,
+    lineWidth: null,
+    lineCap: null,
+    lineJoin: null,
+    lineDash: null,
+    moveTo: null,
+    lineTo: null,
+    ellipse: null,
+    quadraticCurveTo: null,
+    bezierCurveTo: null,
+    closePath: null,
+    stroke: null,
+    fill: null,
+    strokeRect: null,
+    fillRect: null
+};
+Rasterizer.Path = Path;
+
 function stroke_polyline(set_pixel, points, lw, ld, lc, lj, xmin, ymin, xmax, ymax)
 {
     var n = points.length, i,
@@ -350,43 +495,6 @@ function stroke_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, xmin, ym
         wu_thick_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, xmin, ymin, xmax, ymax);
     }
 }
-function stroke_arc(set_pixel, cx, cy, rx, ry, a, t0, t1, lw, ld, lc, lj, xmin, ymin, xmax, ymax)
-{
-    var cos = stdMath.cos(a),
-        sin = stdMath.sin(a),
-        arc = function(t) {
-            var p = t0 + t*(t1 - t0),
-                x = rx*stdMath.cos(p),
-                y = ry*stdMath.sin(p);
-            return [
-                cx + cos*x - sin*y,
-                cy + sin*x + cos*y
-            ];
-        };
-    stroke_polyline(set_pixel, sample_curve(arc, NUM_POINTS, PIXEL_SIZE, true), lw, ld, lc, 'bevel', xmin, ymin, xmax, ymax);
-}
-function stroke_bezier(set_pixel, c, lw, ld, lc, lj, xmin, ymin, xmax, ymax)
-{
-    var quadratic = function(t) {
-           var t0 = t, t1 = 1 - t, t11 = t1*t1, t10 = 2*t1*t0, t00 = t0*t0;
-           return [
-               t11*c[0] + t10*c[2] + t00*c[4],
-               t11*c[1] + t10*c[3] + t00*c[5]
-           ];
-        },
-        cubic = function(t) {
-            var t0 = t, t1 = 1 - t,
-                t0t0 = t0*t0, t1t1 = t1*t1,
-                t111 = t1t1*t1, t000 = t0t0*t0,
-                t110 = 3*t1t1*t0, t100 = 3*t0t0*t1;
-           return [
-               t111*c[0] + t110*c[2] + t100*c[4] + t000*c[6],
-               t111*c[1] + t110*c[3] + t100*c[5] + t000*c[7]
-           ];
-        };
-    stroke_polyline(set_pixel, sample_curve(6 < c.length ? cubic : quadratic, NUM_POINTS, PIXEL_SIZE, true), lw, ld, lc, 'bevel', xmin, ymin, xmax, ymax);
-}
-
 function ww(w, dx, dy)
 {
     if (1 >= w)
@@ -924,11 +1032,129 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
         fill_triangle(set_pixel, t.x, t.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
     }
 }
-
-
+function arc_points(cx, cy, rx, ry, a, t0, t1)
+{
+    var cos = stdMath.cos(a),
+        sin = stdMath.sin(a),
+        arc = function(t) {
+            var p = t0 + t*(t1 - t0),
+                x = rx*stdMath.cos(p),
+                y = ry*stdMath.sin(p);
+            return [
+                cx + cos*x - sin*y,
+                cy + sin*x + cos*y
+            ];
+        };
+    return sample_curve(arc, NUM_POINTS, PIXEL_SIZE, true);
+}
+function bezier_points(c)
+{
+    var quadratic = function(t) {
+           var t0 = t, t1 = 1 - t, t11 = t1*t1, t10 = 2*t1*t0, t00 = t0*t0;
+           return [
+               t11*c[0] + t10*c[2] + t00*c[4],
+               t11*c[1] + t10*c[3] + t00*c[5]
+           ];
+        },
+        cubic = function(t) {
+            var t0 = t, t1 = 1 - t,
+                t0t0 = t0*t0, t1t1 = t1*t1,
+                t111 = t1t1*t1, t000 = t0t0*t0,
+                t110 = 3*t1t1*t0, t100 = 3*t0t0*t1;
+           return [
+               t111*c[0] + t110*c[2] + t100*c[4] + t000*c[6],
+               t111*c[1] + t110*c[3] + t100*c[5] + t000*c[7]
+           ];
+        };
+    return sample_curve(6 < c.length ? cubic : quadratic, NUM_POINTS, PIXEL_SIZE, true);
+}
+function evenodd_fill(set_pixel, edges, xmin, ymin, xmax, ymax)
+{
+    if (!edges.length) return;
+    var n = edges.length, i = 0, j, k, e,
+        y = edges[i][1], yM = edges[n-1][3],
+        y1, y2, x, xm, xM, x1, x2, xi,
+        insidel, insider;
+    y = stdMath.max(ymin, stdMath.round(y + 0.5));
+    yM = stdMath.min(ymax, stdMath.round(yM - 0.5));
+    for (; y<=yM; ++y)
+    {
+        while (i < n && edges[i][3] < y)
+        {
+            ++i;
+        }
+        if (i >= n) break;
+        e = edges[i];
+        if (e[1] > y)
+        {
+            y = stdMath.round(e[1]) - 1;
+            continue;
+        }
+        x1 = e[0];
+        x2 = e[2];
+        y1 = e[1];
+        y2 = e[3];
+        if (is_strictly_equal(y1, y2))
+        {
+            xm = stdMath.min(x1, x2);
+            xM = stdMath.max(x1, x2);
+            xi = xm;
+        }
+        else
+        {
+            xi = (x2 - x1)*(y - y1)/(y2 - y1) + x1;
+            xm = xi;
+            xM = xi;
+        }
+        // store intersection point
+        e[5] = xi;
+        j = i + 1;
+        while (j < n && edges[j][1] < y)
+        {
+            e = edges[j];
+            x1 = e[0];
+            x2 = e[2];
+            y1 = e[1];
+            y2 = e[3];
+            if (is_strictly_equal(y1, y2))
+            {
+                xi = stdMath.min(x1, x2);
+                xm = stdMath.min(xm, x1, x2);
+                xM = stdMath.max(xM, x1, x2);
+            }
+            else
+            {
+                xi = (x2 - x1)*(y - y1)/(y2 - y1) + x1;
+                xm = stdMath.min(xm, xi);
+                xM = stdMath.max(xM, xi);
+            }
+            // store intersection point
+            e[5] = xi;
+            ++j;
+        }
+        xm = stdMath.max(xmin, stdMath.round(xm + 0.5));
+        xM = stdMath.min(xmax, stdMath.round(xM - 0.5));
+        for (x=xm; x<=xM; ++x)
+        {
+            for (insider=false,insidel=false,k=i; k<j; ++k)
+            {
+                xi = edges[k][5];
+                // intersects segment on the right side
+                if (xi > x) insider = !insider;
+                // intersects segment on the left side
+                if (xi < x) insidel = !insidel;
+            }
+            if (insider && insidel) set_pixel(x, y, 1);
+        }
+    }
+}
 // utilities -----------------------
 function NOOP() {}
 function err(msg) {throw new Error(msg);}
+function asc(a, b)
+{
+    return a[1] - b[1];
+}
 function clamp(x, min, max)
 {
     return stdMath.min(stdMath.max(x, min), max);
@@ -976,6 +1202,25 @@ function point_line_distance(p0, p1, p2)
     ;
     if (is_strictly_equal(d, 0)) return hypot(x - x1, y - y1);
     return stdMath.abs(dx*(y1 - y) - dy*(x1 - x)) / d;
+}
+function path_to_segments(polylines)
+{
+    var segments = [], m = polylines.length, n, i, j, p;
+    for (j=0; j<m; ++j)
+    {
+        for (p=polylines[j],n=p.length-2,i=0; i<n; i+=2)
+        {
+            if (p[i+1] > p[i+3])
+            {
+                segments.push([p[i+2], p[i+3], p[i], p[i+1], -1, 0]);
+            }
+            else
+            {
+                segments.push([p[i], p[i+1], p[i+2], p[i+3], 1, 0]);
+            }
+        }
+    }
+    return segments;
 }
 function sample_curve(f, n, pixelSize, do_refine)
 {
