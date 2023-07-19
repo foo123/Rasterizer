@@ -551,7 +551,7 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
     zab = is_strictly_equal(yab, 0);
     zbc = is_strictly_equal(ybc, 0);
     y = stdMath.round(ay + e);
-    yb = stdMath.round(by);
+    yb = by;
     yc = stdMath.round(cy - e);
     if (clip) {y = stdMath.max(ymin, y); yc = stdMath.min(ymax, yc);}
     for (; y<=yc; ++y)
