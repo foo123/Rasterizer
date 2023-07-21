@@ -196,7 +196,7 @@ function drawGradientLine(x1, y1, x2, y2, lw, ld, lc)
     r.stroke();
     ctx2.putImageData(imData, 0, 0);
 }
-function drawGradientArc(cx, cy, rx, ry, a, t0, t1, fs, lw, ld, lc)
+function drawGradientArc(cx, cy, rx, ry, a, t0, t1, fs, lw, ld, lc, lj)
 {
     const canvas1 = document.createElement('canvas');
     const canvas2 = document.createElement('canvas');
@@ -218,11 +218,13 @@ function drawGradientArc(cx, cy, rx, ry, a, t0, t1, fs, lw, ld, lc)
     const grad1 = addColorStops(ctx1.createLinearGradient(20, 20, 180, 180));
     const grad2 = addColorStops(Gradient.createLinearGradient(20, 20, 180, 180));
 
+    lj = lj || 'miter';
     lc = lc || 'butt';
     ld = ld || [];
     ctx1.beginPath();
     ctx1.strokeStyle = grad1;
     ctx1.lineCap = lc;
+    ctx1.lineJoin = lj;
     ctx1.lineWidth = lw;
     ctx1.setLineDash(ld);
     ctx1.ellipse(cx, cy, rx, ry, a, t0, t1, fs);
@@ -233,13 +235,14 @@ function drawGradientArc(cx, cy, rx, ry, a, t0, t1, fs, lw, ld, lc)
     r.beginPath();
     r.strokeStyle = grad2.getColorAt.bind(grad2);
     r.lineCap = lc;
+    r.lineJoin = lj;
     r.lineWidth = lw;
     r.setLineDash(ld);
     r.ellipse(cx, cy, rx, ry, a, t0, t1, fs);
     r.stroke();
     ctx2.putImageData(imData, 0, 0);
 }
-function drawGradientBezier(c, lw, ld, lc)
+function drawGradientBezier(c, lw, ld, lc, lj)
 {
     const canvas1 = document.createElement('canvas');
     const canvas2 = document.createElement('canvas');
@@ -261,11 +264,13 @@ function drawGradientBezier(c, lw, ld, lc)
     const grad1 = addColorStops(ctx1.createLinearGradient(20, 20, 180, 180));
     const grad2 = addColorStops(Gradient.createLinearGradient(20, 20, 180, 180));
 
+    lj = lj || 'miter';
     lc = lc || 'butt';
     ld = ld || [];
     ctx1.beginPath();
     ctx1.strokeStyle = grad1;
     ctx1.lineCap = lc;
+    ctx1.lineJoin = lj;
     ctx1.lineWidth = lw;
     ctx1.setLineDash(ld);
     ctx1.moveTo(c[0], c[1]);
@@ -277,6 +282,7 @@ function drawGradientBezier(c, lw, ld, lc)
     r.beginPath();
     r.strokeStyle = grad2.getColorAt.bind(grad2);
     r.lineCap = lc;
+    r.lineJoin = lj;
     r.lineWidth = lw;
     r.setLineDash(ld);
     r.moveTo(c[0], c[1]);
@@ -284,7 +290,7 @@ function drawGradientBezier(c, lw, ld, lc)
     r.stroke();
     ctx2.putImageData(imData, 0, 0);
 }
-function fillGradientBezier(c, lw, ld, lc)
+function fillGradientBezier(c, fillRule)
 {
     const canvas1 = document.createElement('canvas');
     const canvas2 = document.createElement('canvas');
@@ -296,8 +302,10 @@ function fillGradientBezier(c, lw, ld, lc)
     canvas1.style.height = String(h)+'px';
     canvas2.style.width = String(w)+'px';
     canvas2.style.height = String(h)+'px';
-    test1.appendChild(text('Filled Gradient Bezier'));
-    test2.appendChild(text('Filled Gradient Bezier'));
+    fillRule = fillRule || 'nonzero';//'nonzero';//'evenodd';
+
+    test1.appendChild(text('Filled Gradient Bezier ('+fillRule+')'));
+    test2.appendChild(text('Filled Gradient Bezier ('+fillRule+')'));
     test1.appendChild(canvas1);
     test2.appendChild(canvas2);
 
@@ -306,27 +314,58 @@ function fillGradientBezier(c, lw, ld, lc)
     const grad1 = addColorStops(ctx1.createLinearGradient(20, 20, 180, 180));
     const grad2 = addColorStops(Gradient.createLinearGradient(20, 20, 180, 180));
 
-    lc = lc || 'butt';
-    ld = ld || [];
     ctx1.beginPath();
     ctx1.fillStyle = grad1;
-    ctx1.lineCap = lc;
-    ctx1.lineWidth = lw;
-    ctx1.setLineDash(ld);
     ctx1.moveTo(c[0], c[1]);
     ctx1.bezierCurveTo(c[2], c[3], c[4], c[5], c[6], c[7]);
-    ctx1.fill('evenodd'/*'nonzero'*/);
+    ctx1.fill(fillRule);
 
     const imData = ctx2.getImageData(0, 0, w, h);
     const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
     r.beginPath();
     r.fillStyle = grad2.getColorAt.bind(grad2);
-    r.lineCap = lc;
-    r.lineWidth = lw;
-    r.setLineDash(ld);
     r.moveTo(c[0], c[1]);
     r.bezierCurveTo(c[2], c[3], c[4], c[5], c[6], c[7]);
-    r.fill('evenodd'/*'nonzero'*/);
+    r.fill(fillRule);
+    ctx2.putImageData(imData, 0, 0);
+}
+function fillGradientDisk(cx, cy, r1, r2, fillRule)
+{
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+    fillRule = fillRule || 'nonzero';//'nonzero';//'evenodd';
+
+    test1.appendChild(text('Filled Gradient Disk ('+fillRule+')'));
+    test2.appendChild(text('Filled Gradient Disk ('+fillRule+')'));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+
+    const ctx1 = canvas1.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
+    const grad1 = addColorStops(ctx1.createLinearGradient(20, 20, 180, 180));
+    const grad2 = addColorStops(Gradient.createLinearGradient(20, 20, 180, 180));
+
+    ctx1.beginPath();
+    ctx1.fillStyle = grad1;
+    ctx1.ellipse(cx, cy, r2, r2, 0, 0, 2*Math.PI, false);
+    ctx1.ellipse(cx, cy, r1, r1, 0, 0, 2*Math.PI, true);
+    ctx1.fill(fillRule);
+
+    const imData = ctx2.getImageData(0, 0, w, h);
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
+    r.beginPath();
+    r.fillStyle = grad2.getColorAt.bind(grad2);
+    r.ellipse(cx, cy, r2, r2, 0, 0, 2*Math.PI, false);
+    r.ellipse(cx, cy, r1, r1, 0, 0, 2*Math.PI, true);
+    r.fill(fillRule);
     ctx2.putImageData(imData, 0, 0);
 }
 
@@ -353,9 +392,12 @@ drawPolyline(20, 10, 40, 60, 10, 70, 20, [], 'butt', 'miter');
 drawPolyline(20, 70, 40, 20, 70, 60, 20, [], 'butt', 'miter');
 drawPolyline(20, 10, 40, 70, 70, 20, 20, [], 'butt', 'miter');
 drawPolyline(70, 20, 40, 70, 20, 10, 20, [], 'butt', 'miter');
-drawGradientArc(50, 50, 20, 40, 30*Math.PI/180, 1, Math.PI/2, true, 2, [], 'butt');
-drawGradientBezier([10, 10, 200, 100, 10, 100, 70, 10], 4, [], 'butt');
-fillGradientBezier([10, 10, 200, 100, 10, 100, 70, 10], 4, [], 'butt');
+drawGradientArc(50, 50, 20, 40, 30*Math.PI/180, 1, Math.PI/2, true, 2, [], 'butt', 'bevel');
+drawGradientBezier([10, 10, 200, 100, 10, 100, 70, 10], 4, [], 'butt', 'bevel');
+fillGradientBezier([10, 10, 200, 100, 10, 100, 70, 10], 'nonzero');
+fillGradientBezier([10, 10, 200, 100, 10, 100, 70, 10], 'evenodd');
+fillGradientDisk(50, 50, 10, 40, 'nonzero');
+fillGradientDisk(50, 50, 10, 40, 'evenodd');
 })();
 </script>
 </body></html>
