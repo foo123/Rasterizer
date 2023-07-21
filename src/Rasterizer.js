@@ -1159,7 +1159,7 @@ function fill_path(set_pixel, rule, path, xmin, ymin, xmax, ymax)
         {
             console.log('range', y, xm, xM, edg.slice(0, k));
         }
-        if (2 > k-c) {console.log('k', y, i, k, c); continue;}
+        if (c+2 > k) {console.log('k', y, i, k, c); continue;}
         xm = stdMath.max(xmin, stdMath.round(xm + 0.5));
         xM = stdMath.min(xmax, stdMath.round(xM - 0.5));
         if (xm > xM)
