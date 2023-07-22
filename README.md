@@ -4,7 +4,7 @@ Rasterize, stroke and fill lines, rectangles, curves and paths. Even without can
 
 **version: 0.9.5** (13 kB minified)
 
-**What is not supported yet
+**What is not supported yet:**
 
 1. `round` lineCap
 2. `round` lineJoin
