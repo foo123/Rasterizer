@@ -3,7 +3,7 @@
 
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 
-<title>Rasterizer Lines</title>
+<title>Rasterizer Test</title>
 <style type="text/css">
 body {
     font-size: 16px;
@@ -329,7 +329,7 @@ function fillGradientBezier(c, fillRule)
     r.fill(fillRule);
     ctx2.putImageData(imData, 0, 0);
 }
-function fillGradientDisk(cx, cy, r1, r2, fillRule)
+function fillGradientDisk(cx, cy, r1, r2, fillRule, same)
 {
     const canvas1 = document.createElement('canvas');
     const canvas2 = document.createElement('canvas');
@@ -356,7 +356,7 @@ function fillGradientDisk(cx, cy, r1, r2, fillRule)
     ctx1.beginPath();
     ctx1.fillStyle = grad1;
     ctx1.ellipse(cx, cy, r2, r2, 0, 0, 2*Math.PI, false);
-    ctx1.ellipse(cx, cy, r1, r1, 0, 0, 2*Math.PI, true);
+    ctx1.ellipse(cx, cy, r1, r1, 0, 0, 2*Math.PI, same ? false : true);
     ctx1.fill(fillRule);
 
     const imData = ctx2.getImageData(0, 0, w, h);
@@ -364,7 +364,7 @@ function fillGradientDisk(cx, cy, r1, r2, fillRule)
     r.beginPath();
     r.fillStyle = grad2.getColorAt.bind(grad2);
     r.ellipse(cx, cy, r2, r2, 0, 0, 2*Math.PI, false);
-    r.ellipse(cx, cy, r1, r1, 0, 0, 2*Math.PI, true);
+    r.ellipse(cx, cy, r1, r1, 0, 0, 2*Math.PI, same ? false : true);
     r.fill(fillRule);
     ctx2.putImageData(imData, 0, 0);
 }
@@ -396,8 +396,10 @@ drawGradientArc(50, 50, 20, 40, 30*Math.PI/180, 1, Math.PI/2, true, 2, [], 'butt
 drawGradientBezier([10, 10, 200, 100, 10, 100, 70, 10], 4, [], 'butt', 'bevel');
 fillGradientBezier([10, 10, 200, 100, 10, 100, 70, 10], 'nonzero');
 fillGradientBezier([10, 10, 200, 100, 10, 100, 70, 10], 'evenodd');
-fillGradientDisk(50, 50, 10, 40, 'nonzero');
-fillGradientDisk(50, 50, 10, 40, 'evenodd');
+fillGradientDisk(50, 50, 10, 40, 'nonzero', true);
+fillGradientDisk(50, 50, 10, 40, 'evenodd', true);
+fillGradientDisk(50, 50, 10, 40, 'nonzero', false);
+fillGradientDisk(50, 50, 10, 40, 'evenodd', false);
 })();
 </script>
 </body></html>

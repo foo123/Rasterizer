@@ -20,9 +20,8 @@ else if (!(name in root)) /* Browser/WebWorker/.. */
 "use strict";
 
 var def = Object.defineProperty,
-    stdMath = Math, INF = Infinity,
-    PI = stdMath.PI, TWO_PI = 2*PI,
-    EPS = 1e-4, sqrt2 = stdMath.sqrt(2),
+    stdMath = Math, INF = Infinity, sqrt2 = stdMath.sqrt(2),
+    PI = stdMath.PI, TWO_PI = 2*PI, HALF_PI = PI/2,
     NUM_POINTS = 6, MIN_LEN = sqrt2, PIXEL_SIZE = 0.5,
     ImArray = 'undefined' !== typeof Uint8ClampedArray ? Uint8ClampedArray : ('undefined' !== typeof Uint8Array ? Uint8Array : Array);
 
@@ -325,18 +324,9 @@ function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth,
         return self;
     };
     self.ellipse = function(cx, cy, rx, ry, angle, start, end, fs) {
-        var t0, t1, p;
-        if (fs)
-        {
-            t0 = -end - PI;
-            t1 = start;
-        }
-        else
-        {
-            t0 = start;
-            t1 = end;
-        }
-        p = arc_points(cx, cy, rx, ry, angle, t0, t1, fs);
+        var p = arc_points(cx, cy, rx, ry, angle, start, end, fs);
+        p.lineCap = 'butt';
+        p.lineJoin = 'bevel';
         d.push(p);
         d.push([0, 0]);
         return self;
@@ -371,7 +361,7 @@ function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth,
                 p = d[i];
                 if (p && (2 < p.length))
                 {
-                    stroke_polyline(set_pixel, p, lineWidth, lineDash, lineCap, lineJoin, xmin, ymin, xmax, ymax);
+                    stroke_polyline(set_pixel, p, lineWidth, lineDash, p.lineCap || lineCap, p.lineJoin || lineJoin, xmin, ymin, xmax, ymax);
                 }
             }
             canvas_output(stroke_pixel);
@@ -384,8 +374,8 @@ function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth,
             xmin = 0, ymin = 0,
             xmax = width - 1, ymax = height - 1;
         canvas_reset();
-        // stroke path outline
-        mult = lw;
+        // stroke a thin path outline
+        if (1 > lw) mult = lw;
         for (var i=0,n=d.length,p; i<n; ++i)
         {
             p = d[i];
@@ -412,7 +402,7 @@ function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth,
             x + w - 1, y + h - 1,
             x, y + h - 1,
             x, y
-            ], lineWidth, lineDash, lineCap, lineJoin, 0, 0, width - 1, height - 1);
+            ], lineWidth, lineDash, 'butt', 'miter', 0, 0, width - 1, height - 1);
             canvas_output(stroke_pixel);
             mult = m;
         }
@@ -589,7 +579,7 @@ function intersect(x1, y1, x2, y2, x3, y3, x4, y4)
         k = y4 - y3, l = x3 - x4, m = x4*y3 - x3*y4,
         D = a*l - b*k;
     // zero, infinite or one point
-    return is_almost_equal(D, 0) ? false : {x:(b*m - c*l)/D, y:(c*k - a*m)/D};
+    return is_strictly_equal(D, 0) ? false : {x:(b*m - c*l)/D, y:(c*k - a*m)/D};
 }
 function fill_rect(set_pixel, x1, y1, x2, y2, xmin, ymin, xmax, ymax)
 {
@@ -931,8 +921,7 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
 }
 function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, dy2, wx2, wy2, j, xmin, ymin, xmax, ymax)
 {
-    if ('bevel' !== j && 'miter' !== j) return;
-    if (is_almost_equal(dy1*dx2, dy2*dx1)) return;
+    if (('bevel' !== j && 'miter' !== j) || is_almost_equal(dy1*dx2, dy2*dx1, 1e-4)) return;
 
     var sx1, sy1, sx2, sy2,
         wsx1, wsy1, wsx2, wsy2,
@@ -1041,13 +1030,14 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
         fill_triangle(set_pixel, t.x, t.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
     }
 }
-function arc_points(cx, cy, rx, ry, a, t0, t1, fs)
+function arc_points(cx, cy, rx, ry, a, ts, te, fs)
 {
+    if (fs) te = - te - PI;
     var cos = stdMath.cos(a),
         sin = stdMath.sin(a),
-        delta = t1 - t0,
+        delta = te - ts,
         arc = function(t) {
-            var p = t0 + (fs ? (1 - t) : t)*delta,
+            var p = ts + t*delta,
                 x = rx*stdMath.cos(p),
                 y = ry*stdMath.sin(p);
             return [
@@ -1057,7 +1047,7 @@ function arc_points(cx, cy, rx, ry, a, t0, t1, fs)
         },
         points = sample_curve(arc);
 
-    if (stdMath.abs(delta)+EPS >= TWO_PI && !is_almost_equal(points[0], points[points.length-2]) && !is_almost_equal(points[1], points[points.length-1])) points.push(points[0], points[1]);
+    if (stdMath.abs(delta)+1e-4 >= TWO_PI && !is_almost_equal(points[0], points[points.length-2], 1e-4) && !is_almost_equal(points[1], points[points.length-1], 1e-4)) points.push(points[0], points[1]);
     return points;
 }
 function bezier_points(c)
@@ -1102,7 +1092,6 @@ function fill_path(set_pixel, rule, path, xmin, ymin, xmax, ymax)
         e = d = edges[i];
         if (e[1] > y)
         {
-            console.log('jump', y, i, e);
             y = stdMath.floor(e[1]);
             continue;
         }
@@ -1122,15 +1111,16 @@ function fill_path(set_pixel, rule, path, xmin, ymin, xmax, ymax)
             xm = xi;
             xM = xi;
         }
-        // store intersection point
-        e[5] = xi;
-        e[6] = 0;
+        // store intersection point to be used later
+        e[6] = xi;
+        e[7] = 0;
         edg[0] = e;
         k = 1;
+        // get rest edges that intersect at this y
         for (j=i+1; j<n && edges[j][1]<=y; ++j)
         {
             e = edges[j];
-            if ((e[3] >= y) && !is_almost_equal(d[3], e[1], 0.1))
+            if (e[3] >= y)
             {
                 x1 = e[0];
                 x2 = e[2];
@@ -1148,63 +1138,60 @@ function fill_path(set_pixel, rule, path, xmin, ymin, xmax, ymax)
                     xm = stdMath.min(xm, xi);
                     xM = stdMath.max(xM, xi);
                 }
-                // store intersection point
-                e[5] = xi;
-                e[6] = 0;
+                // store intersection point to be used later
+                e[6] = xi;
+                e[7] = 0;
                 edg[k++] = e;
             }
         }
-        c = remove_dupl(edg, k);
-        if (stdMath.abs(y-50) < 6)
-        {
-            console.log('range', y, xm, xM, edg.slice(0, k));
-        }
-        if (c+2 > k) {console.log('k', y, i, k, c); continue;}
+        // some edges found are redundant, mark them
+        c = redundant(edg, k);
+        if (c+2 > k) continue; // at least two edges are needed
         xm = stdMath.max(xmin, stdMath.round(xm + 0.5));
         xM = stdMath.min(xmax, stdMath.round(xM - 0.5));
-        if (xm > xM)
-        {
-            console.log('xmxM', y, xm, xM, edg.slice(0, k));
-        }
-        var f = false;
+        if (xm > xM) continue; // no fill at this point
         if (evenodd)
         {
+            // evenodd fill rule
             for (x=xm; x<=xM; ++x)
             {
                 for (insidel=false,insider=false,j=0; j<k; ++j)
                 {
                     e = edg[j];
-                    if (e[6]) continue;
-                    xi = e[5];
-                    if (false === xi) continue;
+                    if (e[7]) continue; // redundant
+                    xi = e[6];
+                    if (false === xi) continue; // no intersection
                     // intersects segment on the left side
                     if (xi < x) insidel = !insidel;
                     // intersects segment on the right side
                     if (xi > x) insider = !insider;
                 }
-                if (insidel && insider) {f=true;set_pixel(x, y, 1);}
+                if (insidel && insider) set_pixel(x, y, 1);
             }
         }
-        else // nonzero
+        else
         {
+            // nonzero fill rule
             for (x=xm; x<=xM; ++x)
             {
                 for (insidel=0,insider=0,j=0; j<k; ++j)
                 {
                     e = edg[j];
-                    if (e[6]) continue;
-                    xi = e[5];
-                    if (false === xi) continue;
-                    c = wn(x, y, e[0 > e[4] ? 2 : 0], e[0 > e[4] ? 3 : 1], e[0 > e[4] ? 0 : 2], e[0 > e[4] ? 1 : 3]);
-                    // intersects segment on the left side
-                    if (xi < x) insidel += c;
-                    // intersects segment on the right side
-                    if (xi > x) insider += c;
+                    if (e[7]) continue; // redundant
+                    xi = e[6];
+                    if (false === xi) continue; // no intersection
+                    if (xi < x || xi > x)
+                    {
+                        c = wn(x, y, e[0 > e[4] ? 2 : 0], e[0 > e[4] ? 3 : 1], e[0 > e[4] ? 0 : 2], e[0 > e[4] ? 1 : 3]);
+                        // intersects segment on the left side
+                        if (xi < x) insidel += c;
+                        // intersects segment on the right side
+                        if (xi > x) insider += c;
+                    }
                 }
-                if (insidel && insider) {f=true;set_pixel(x, y, 1);}
+                if (insidel && insider) set_pixel(x, y, 1);
             }
         }
-        if (!f) {console.log('none', y, xm, xM, i, k, edg.slice(0, k));}
     }
 }
 
@@ -1236,6 +1223,7 @@ function hypot(dx, dy)
 }
 function wn(x, y, x1, y1, x2, y2)
 {
+    // orientation winding number
     return 0 > (x - x1)*(y2 - y1) - (x2 - x1)*(y - y1) ? -1 : 1;
 }
 function point_line_distance(p0, p1, p2)
@@ -1253,10 +1241,10 @@ function path_to_segments(polylines)
 {
     var segments = [],
         m = polylines.length,
-        n, i, j, p,
+        n, i, j, k, p,
         ymin = Infinity,
         ymax = -Infinity;
-    for (j=0; j<m; ++j)
+    for (k=0,j=0; j<m; ++j)
     {
         p = polylines[j];
         n = p.length - 2;
@@ -1268,40 +1256,43 @@ function path_to_segments(polylines)
                 ymax = stdMath.max(ymax, p[i+1]);
                 if (p[i+1] > p[i+3])
                 {
-                    segments.push([p[i+2], p[i+3], p[i], p[i+1], -1, 0, 0]);
+                    segments.push([p[i+2], p[i+3], p[i], p[i+1], -1, k, 0, 0]);
                 }
                 else
                 {
-                    segments.push([p[i], p[i+1], p[i+2], p[i+3], 1, 0, 0]);
+                    segments.push([p[i], p[i+1], p[i+2], p[i+3], 1, k, 0, 0]);
                 }
             }
             ymin = stdMath.min(ymin, p[n+1]);
             ymax = stdMath.max(ymax, p[n+1]);
+            ++k;
         }
     }
     segments.ymin = ymin;
     segments.ymax = ymax;
     return segments;
 }
-function remove_dupl(edg, n)
+function redundant(edg, n)
 {
     var i, j, e, f, c = 0;
     for (i=0; i<n; ++i)
     {
         e = edg[i];
-        if (e[6]) continue;
+        if (e[7]) continue;
         for (j=i+1; j<n; ++j)
         {
             f = edg[j];
-            if (f[6] || (e[4] !== f[4])) continue;
+            if (f[7] || (e[4] !== f[4]) || (e[5] !== f[5])) continue;
             if (
-                is_almost_equal(e[0], f[0])
-                && is_almost_equal(e[1], f[1])
-                && is_almost_equal(e[2], f[2])
-                && is_almost_equal(e[3], f[3])
+                (/*(e[4] === f[4])
+                &&*/ is_almost_equal(e[0], f[0], 1e-5)
+                && is_almost_equal(e[1], f[1], 1e-5)
+                && is_almost_equal(e[2], f[2], 1e-5)
+                && is_almost_equal(e[3], f[3], 1e-5))
+                || (is_almost_equal(e[3], f[1], 1e-6))
             )
             {
-                f[6] = 1;
+                f[7] = 1;
                 ++c;
             }
         }
@@ -1321,7 +1312,7 @@ function sample_curve(f)
 }
 function subdivide_curve(points, f, l, r, left, right)
 {
-    if ((l >= r) || is_almost_equal(l, r)) return left;
+    if ((l >= r) || is_almost_equal(l, r, 1e-6)) return left;
     left = left || f(l); right = right || f(r);
     var m, middle, d = hypot(right[0] - left[0], right[1] - left[1]);
     if (d <= MIN_LEN)
@@ -1352,7 +1343,7 @@ function subdivide_curve(points, f, l, r, left, right)
 }
 function is_almost_equal(a, b, eps)
 {
-    return stdMath.abs(a - b) < (eps || EPS);
+    return stdMath.abs(a - b) < (eps || 1e-6);
 }
 function is_strictly_equal(a, b)
 {

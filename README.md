@@ -1,8 +1,15 @@
 # Rasterizer
 
-Rasterize, draw and fill lines, rectangles and curves. Even without canvas.
+Rasterize, stroke and fill lines, rectangles, curves and paths. Even without canvas.
 
-**version: 0.9.5** (9 kB minified)
+**version: 0.9.5** (13 kB minified)
+
+**What is not supported yet
+
+1. `round` lineCap
+2. `round` lineJoin
+3. lineDash (only solid lines)
+
 
 **Test/Demo:**
 
