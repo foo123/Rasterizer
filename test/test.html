@@ -101,7 +101,7 @@ function drawLine(x1, y1, x2, y2, lw, ld, lc)
     r.stroke();
     ctx2.putImageData(imData, 0, 0);
 }
-function drawPolyline(x1, y1, x2, y2, x3, y3, lw, ld, lc, lj)
+function drawPolyline(x1, y1, x2, y2, x3, y3, lw, ld, lc, lj, ml)
 {
     const canvas1 = document.createElement('canvas');
     const canvas2 = document.createElement('canvas');
@@ -121,6 +121,7 @@ function drawPolyline(x1, y1, x2, y2, x3, y3, lw, ld, lc, lj)
     const ctx1 = canvas1.getContext("2d");
     const ctx2 = canvas2.getContext("2d");
 
+    ml = ml || 10.0;
     lj = lj || 'miter';//'bevel';//'round';
     lc = lc || 'butt';//'square';//'round';
     ld = ld || [];
@@ -129,6 +130,7 @@ function drawPolyline(x1, y1, x2, y2, x3, y3, lw, ld, lc, lj)
     ctx1.strokeStyle = 'rgba(0,0,0,0.5)';
     ctx1.lineCap = lc;
     ctx1.lineJoin = lj;
+    ctx1.miterLimit = ml;
     ctx1.lineWidth = lw;
     ctx1.setLineDash(ld);
     ctx1.moveTo(x1, y1); // move creates new polyline
@@ -142,6 +144,7 @@ function drawPolyline(x1, y1, x2, y2, x3, y3, lw, ld, lc, lj)
     r.strokeStyle = [0,0,0, 0.5];
     r.lineCap = lc;
     r.lineJoin = lj;
+    r.miterLimit = ml;
     r.lineWidth = lw;
     r.setLineDash(ld);
     r.moveTo(x1, y1); // move creates new polyline
@@ -368,6 +371,70 @@ function fillGradientDisk(cx, cy, r1, r2, fillRule, same)
     r.fill(fillRule);
     ctx2.putImageData(imData, 0, 0);
 }
+function globalAlpha()
+{
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+
+    test1.appendChild(text('Alpha Test'));
+    test2.appendChild(text('Alpha Test'));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+    
+    const ctx1 = canvas1.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
+    
+    // Draw background
+    ctx1.fillStyle = "#FD0";
+    ctx1.fillRect(0, 0, 75, 75);
+    ctx1.fillStyle = "#6C0";
+    ctx1.fillRect(75, 0, 75, 75);
+    ctx1.fillStyle = "#09F";
+    ctx1.fillRect(0, 75, 75, 75);
+    ctx1.fillStyle = "#F30";
+    ctx1.fillRect(75, 75, 75, 75);
+    ctx1.fillStyle = "#FFF";
+    // Set transparency value
+    ctx1.globalAlpha = 0.2;
+    // Draw transparent circles
+    for (let i = 0; i < 7; ++i)
+    {
+      ctx1.beginPath();
+      ctx1.arc(75, 75, 10 + 10 * i, 0, Math.PI * 2, true);
+      ctx1.fill();
+    }
+
+    const imData = ctx2.getImageData(0, 0, w, h);
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
+    // Draw background
+    r.fillStyle = [0xff, 0xdd, 0, 1];
+    r.fillRect(0, 0, 75, 75);
+    r.fillStyle = [0x66, 0xcc, 0, 1];
+    r.fillRect(75, 0, 75, 75);
+    r.fillStyle = [0, 0x99, 0xff, 1];
+    r.fillRect(0, 75, 75, 75);
+    r.fillStyle = [0xff, 0x33, 0, 1];
+    r.fillRect(75, 75, 75, 75);
+    r.fillStyle = [0xff, 0xff, 0xff, 1];
+    // Set transparency value
+    r.globalAlpha = 0.2;
+    // Draw transparent circles
+    for (let i = 0; i < 7; ++i)
+    {
+      r.beginPath();
+      r.arc(75, 75, 10 + 10 * i, 0, Math.PI * 2, true);
+      r.fill();
+    }
+    ctx2.putImageData(imData, 0, 0);
+}
 
 drawLine(20, 20, 80, 100, 1);
 drawLine(20, 20, 80, 100, 0.5);
@@ -392,6 +459,7 @@ drawPolyline(20, 10, 40, 60, 10, 70, 20, [], 'butt', 'miter');
 drawPolyline(20, 70, 40, 20, 70, 60, 20, [], 'butt', 'miter');
 drawPolyline(20, 10, 40, 70, 70, 20, 20, [], 'butt', 'miter');
 drawPolyline(70, 20, 40, 70, 20, 10, 20, [], 'butt', 'miter');
+drawPolyline(10, 10, 15, 70, 20, 10, 20, [], 'butt', 'miter', 1);
 drawGradientArc(50, 50, 20, 40, 30*Math.PI/180, 1, Math.PI/2, true, 2, [], 'butt', 'bevel');
 drawGradientBezier([10, 10, 200, 100, 10, 100, 70, 10], 4, [], 'butt', 'bevel');
 fillGradientBezier([10, 10, 200, 100, 10, 100, 70, 10], 'nonzero');
@@ -400,6 +468,7 @@ fillGradientDisk(50, 50, 10, 40, 'nonzero', true);
 fillGradientDisk(50, 50, 10, 40, 'evenodd', true);
 fillGradientDisk(50, 50, 10, 40, 'nonzero', false);
 fillGradientDisk(50, 50, 10, 40, 'evenodd', false);
+globalAlpha();
 })();
 </script>
 </body></html>

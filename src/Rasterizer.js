@@ -32,9 +32,9 @@ function Rasterizer(width, height, set_rgba_at)
 
     var get_stroke_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]),
         get_fill_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]),
-        lineCap = 'butt', lineJoin = 'miter',
-        lineWidth = 1, lineDash = [],
-        paths = [new Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth, lineDash, lineCap, lineJoin)];
+        lineCap = 'butt', lineJoin = 'miter', miterLimit = 10.0,
+        lineWidth = 1, lineDash = [], lineDashOffset = 0, alpha = 1.0,
+        paths = [new Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, alpha)];
 
     def(self, 'strokeStyle', {
         get: function() {
@@ -100,6 +100,30 @@ function Rasterizer(width, height, set_rgba_at)
             }
         }
     });
+    def(self, 'miterLimit', {
+        get: function() {
+            return miterLimit;
+        },
+        set: function(ml) {
+            ml = +ml;
+            if (0 < ml)
+            {
+                paths[paths.length-1].miterLimit = miterLimit = ml;
+            }
+        }
+    });
+    def(self, 'lineDashOffset', {
+        get: function() {
+            return lineDashOffset;
+        },
+        set: function(ldo) {
+            ldo = +ldo;
+            if (0 < ldo)
+            {
+                paths[paths.length-1].lineDashOffset = lineDashOffset = ldo;
+            }
+        }
+    });
     def(self, 'lineDash', {
         get: function() {
             return lineDash.slice();
@@ -113,6 +137,18 @@ function Rasterizer(width, height, set_rgba_at)
     self.setLineDash = function(ld) {
         self.lineDash = ld;
     };
+    def(self, 'globalAlpha', {
+        get: function() {
+            return alpha;
+        },
+        set: function(a) {
+            a = +a;
+            if (0 <= a && a <= 1)
+            {
+                paths[paths.length-1].globalAlpha = alpha = a;
+            }
+        }
+    });
 
     self.strokeRect = function(x, y, w, h) {
         paths[paths.length-1].strokeRect(x, y, w, h);
@@ -121,7 +157,7 @@ function Rasterizer(width, height, set_rgba_at)
         paths[paths.length-1].fillRect(x, y, w, h);
     };
     self.beginPath = function() {
-        paths.push(new Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth, lineDash, lineCap, lineJoin));
+        paths.push(new Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, alpha));
     };
     self.closePath = function() {
         paths[paths.length-1].closePath();
@@ -131,6 +167,12 @@ function Rasterizer(width, height, set_rgba_at)
     };
     self.lineTo = function(x, y) {
         paths[paths.length-1].lineTo(x, y);
+    };
+    self.rect = function(x, y, w, h) {
+        paths[paths.length-1].rect(x, y, w, h);
+    };
+    self.arc = function(cx, cy, r, start, end, ccw) {
+        paths[paths.length-1].arc(cx, cy, r, start, end, ccw);
     };
     self.ellipse = function(cx, cy, rx, ry, angle, start, end, fs) {
         paths[paths.length-1].ellipse(cx, cy, rx, ry, angle, start, end, fs);
@@ -142,12 +184,22 @@ function Rasterizer(width, height, set_rgba_at)
         paths[paths.length-1].bezierCurveTo(x1, y1, x2, y2, x3, y3);
     };
     self.stroke = function() {
-        paths.forEach(function(p) {p.stroke();});
+        //paths.forEach(function(p) {p.stroke();});
+        paths[paths.length-1].stroke();
     };
     self.fill = function(fillRule) {
         fillRule = String(fillRule || 'nonzero').toLowerCase();
         if (-1 === ['nonzero','evenodd'].indexOf(fillRule)) fillRule = 'nonzero';
-        paths.forEach(function(p) {p.fill(fillRule);});
+        //paths.forEach(function(p) {p.fill(fillRule);});
+        paths[paths.length-1].fill(fillRule);
+    };
+    self.isPointInStroke = function(x, y) {
+        return paths[paths.length-1].isPointInStroke(x, y);
+    };
+    self.isPointInPath = function(x, y, fillRule) {
+        fillRule = String(fillRule || 'nonzero').toLowerCase();
+        if (-1 === ['nonzero','evenodd'].indexOf(fillRule)) fillRule = 'nonzero';
+        return paths[paths.length-1].isPointInPath(x, y, fillRule);
     };
 }
 Rasterizer.VERSION = '0.9.5';
@@ -158,19 +210,38 @@ Rasterizer.prototype = {
     lineWidth: null,
     lineCap: null,
     lineJoin: null,
+    miterLimit: null,
     lineDash: null,
+    lineDashOffset: null,
     setLineDash: null,
+    globalAlpha: null,
     strokeRect: null,
     fillRect: null,
     beginPath: null,
     closePath: null,
     moveTo: null,
     lineTo: null,
+    rect: null,
+    arc: null,
     ellipse: null,
     quadraticCurveTo: null,
     bezierCurveTo: null,
     stroke: null,
-    fill: null
+    fill: null,
+    isPointInStroke: null,
+    isPointInPath: null,
+    createImageData: function(width, height) {
+        return Rasterizer.createImageData(width, height);
+    },
+    strokeText: function() {
+        err('Not Implemented!');
+    },
+    fillText: function() {
+        err('Not Implemented!');
+    },
+    measureText: function() {
+        err('Not Implemented!');
+    }
 };
 Rasterizer.createImageData = function(width, height) {
     return {
@@ -228,7 +299,7 @@ Rasterizer.setRGBATo = function(IMG) {
     }
 };
 
-function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth, lineDash, lineCap, lineJoin)
+function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, alpha)
 {
     var self = this, d = [[0, 0]],
         canvas, mult = 1, set_pixel,
@@ -237,8 +308,11 @@ function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth,
 
     lineWidth = lineWidth || 1;
     lineDash = lineDash || [];
+    lineDashOffset = lineDashOffset || 0;
     lineCap = lineCap || 'butt';
     lineJoin = lineJoin || 'miter';
+    miterLimit = miterLimit || 10.0;
+    alpha = null == alpha ? 1.0 : alpha;
 
     canvas_reset = function canvas_reset() {
         // sparse array/hash
@@ -252,9 +326,9 @@ function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth,
         }
     };
     set_pixel = function set_pixel(x, y, i) {
-        if (0 <= x && x < width && 0 <= y && y < height && 0 < i)
+        if (0 <= x && x < width && 0 <= y && y < height && 0 < i && 0 < alpha)
         {
-            i *= mult;
+            i *= mult*alpha;
             var idx = String(x)+','+String(y)/*String(x + y*width)*/, j = canvas[idx] || 0;
             if (i > j) canvas[idx] = i;
         }
@@ -307,12 +381,36 @@ function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth,
             lineJoin = lj;
         }
     });
+    def(self, 'miterLimit', {
+        get: function() {
+            return miterLimit;
+        },
+        set: function(ml) {
+            miterLimit = ml;
+        }
+    });
+    def(self, 'globalAlpha', {
+        get: function() {
+            return alpha;
+        },
+        set: function(a) {
+            alpha = a;
+        }
+    });
     def(self, 'lineDash', {
         get: function() {
             return lineDash;
         },
         set: function(ld) {
             lineDash = ld;
+        }
+    });
+    def(self, 'lineDashOffset', {
+        get: function() {
+            return lineDashOffset;
+        },
+        set: function(ldo) {
+            lineDashOffset = ldo;
         }
     });
     self.moveTo = function(x, y) {
@@ -323,31 +421,85 @@ function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth,
         d[d.length-1].push(x, y);
         return self;
     };
+    self.rect = function(x, y, w, h) {
+        if (0 < w && 0 < h)
+        {
+            var p = [
+                x, y,
+                x + w - 1, y,
+                x + w - 1, y + h - 1,
+                x, y + h - 1,
+                x, y
+            ];
+            p.lineCap = 'butt';
+            p.lineJoin = 'miter';
+            if (2 >= d[d.length-1].length)
+            {
+                d[d.length-1] = p;
+            }
+            else
+            {
+                d.push(p);
+            }
+        }
+        return self;
+    };
+    self.arc = function(cx, cy, r, start, end, ccw) {
+        var p = arc_points(cx, cy, r, r, 0, start, end, ccw);
+        p.lineCap = 'butt';
+        p.lineJoin = 'bevel';
+        if (2 >= d[d.length-1].length)
+        {
+            d[d.length-1] = p;
+        }
+        else
+        {
+            d.push(p);
+        }
+        return self;
+    };
     self.ellipse = function(cx, cy, rx, ry, angle, start, end, fs) {
         var p = arc_points(cx, cy, rx, ry, angle, start, end, fs);
         p.lineCap = 'butt';
         p.lineJoin = 'bevel';
-        d.push(p);
-        d.push([0, 0]);
+        if (2 >= d[d.length-1].length)
+        {
+            d[d.length-1] = p;
+        }
+        else
+        {
+            d.push(p);
+        }
         return self;
     };
     self.quadraticCurveTo = function(x1, y1, x2, y2) {
-        var yp = d[d.length-1].p.pop(),
-            xp = d[d.length-1].p.pop(),
-            p = bezier_points([xp, yp, x1, y1, x2, y2]);
+        var y0 = d[d.length-1].pop(),
+            x0 = d[d.length-1].pop(),
+            p = bezier_points([x0, y0, x1, y1, x2, y2]);
         d[d.length-1].push.apply(d[d.length-1], p);
         return self;
     };
     self.bezierCurveTo = function(x1, y1, x2, y2, x3, y3) {
-        var yp = d[d.length-1].pop(),
-            xp = d[d.length-1].pop(),
-            p = bezier_points([xp, yp, x1, y1, x2, y2, x3, y3]);
+        var y0 = d[d.length-1].pop(),
+            x0 = d[d.length-1].pop(),
+            p = bezier_points([x0, y0, x1, y1, x2, y2, x3, y3]);
         d[d.length-1].push.apply(d[d.length-1], p);
         return self;
     };
     self.closePath = function() {
-        d[d.length-1].push(d[d.length-1][0], d[d.length-1][1]);
-        d.push([0, 0]);
+        if (2 < d[d.length-1].length)
+        {
+            var x0 = d[d.length-1][0],
+                y0 = d[d.length-1][1],
+                x1 = d[d.length-1][d[d.length-1].length-2],
+                y1 = d[d.length-1][d[d.length-1].length-1]
+            ;
+            if (!(is_almost_equal(x0, x1, 1e-6) && is_almost_equal(y0, y1, 1e-6)))
+            {
+                d[d.length-1].push(x0, y0);
+            }
+            d.push([0, 0]);
+        }
         return self;
     };
     self.stroke = function() {
@@ -361,7 +513,7 @@ function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth,
                 p = d[i];
                 if (p && (2 < p.length))
                 {
-                    stroke_polyline(set_pixel, p, lineWidth, lineDash, p.lineCap || lineCap, p.lineJoin || lineJoin, xmin, ymin, xmax, ymax);
+                    stroke_polyline(set_pixel, p, lineWidth, lineDash, lineDashOffset, p.lineCap || lineCap, p.lineJoin || lineJoin, miterLimit, xmin, ymin, xmax, ymax);
                 }
             }
             canvas_output(stroke_pixel);
@@ -381,7 +533,7 @@ function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth,
             p = d[i];
             if (p && (2 < p.length))
             {
-                stroke_polyline(set_pixel, p, lw, [], 'butt', 'bevel', xmin, ymin, xmax, ymax);
+                stroke_polyline(set_pixel, p, lw, [], 0, 'butt', 'bevel', 0, xmin, ymin, xmax, ymax);
             }
         }
         mult = m;
@@ -389,6 +541,12 @@ function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth,
         fill_path(set_pixel, fillRule, d, xmin, ymin, xmax, ymax);
         canvas_output(fill_pixel);
         return self;
+    };
+    self.isPointInStroke = function(x, y) {
+        return point_in_stroke(x, y, d);
+    };
+    self.isPointInPath = function(x, y, fillRule) {
+        return point_in_path(x, y, d, fillRule);
     };
     self.strokeRect = function(x, y, w, h) {
         if (1 <= w && 1 <= h && 0 < lineWidth)
@@ -402,10 +560,11 @@ function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth,
             x + w - 1, y + h - 1,
             x, y + h - 1,
             x, y
-            ], lineWidth, lineDash, 'butt', 'miter', 0, 0, width - 1, height - 1);
+            ], lineWidth, lineDash, lineDashOffset, 'butt', 'miter', miterLimit, 0, 0, width - 1, height - 1);
             canvas_output(stroke_pixel);
             mult = m;
         }
+        return self;
     };
     self.fillRect = function(x, y, w, h) {
         if (1 <= w && 1 <= h)
@@ -428,13 +587,20 @@ Path.prototype = {
     lineWidth: null,
     lineCap: null,
     lineJoin: null,
+    miterLimit: null,
+    globalAlpha: null,
     lineDash: null,
+    lineDashOffset: null,
     moveTo: null,
     lineTo: null,
+    rect: null,
+    arc: null,
     ellipse: null,
     quadraticCurveTo: null,
     bezierCurveTo: null,
     closePath: null,
+    isPointInStroke: null,
+    isPointInPath: null,
     stroke: null,
     fill: null,
     strokeRect: null,
@@ -442,11 +608,113 @@ Path.prototype = {
 };
 Rasterizer.Path = Path;
 
-function stroke_polyline(set_pixel, points, lw, ld, lc, lj, xmin, ymin, xmax, ymax)
+// Homogeneous Transformation Matrix
+/*function Matrix(m00, m01, m02, m10, m11, m12)
+{
+    var self = this;
+    if (arguments.length)
+    {
+        self.m00 = m00;
+        self.m01 = m01;
+        self.m02 = m02;
+        self.m10 = m10;
+        self.m11 = m11;
+        self.m12 = m12;
+    }
+}
+Matrix.prototype = {
+    constructor: Matrix,
+    m00: 1,
+    m01: 0,
+    m02: 0,
+    m10: 0,
+    m11: 1,
+    m12: 0,
+    clone: function() {
+        var self = this;
+        return new Matrix(
+        self.m00, self.m01, self.m02,
+        self.m10, self.m11, self.m12
+        );
+    },
+    mul: function(other) {
+        var self = this;
+        if (other instanceof Matrix)
+        {
+            return new Matrix(
+            self.m00*other.m00 + self.m01*other.m10,
+            self.m00*other.m01 + self.m01*other.m11,
+            self.m00*other.m02 + self.m01*other.m12 + self.m02,
+            self.m10*other.m00 + self.m11*other.m10,
+            self.m10*other.m01 + self.m11*other.m11,
+            self.m10*other.m02 + self.m11*other.m12 + self.m12
+            );
+        }
+    },
+    inv: function() {
+        var self = this,
+            a00 = self.m00, a01 = self.m01, a02 = self.m02,
+            a10 = self.m10, a11 = self.m11, a12 = self.m12,
+            det2 = a00*a11 - a01*a10,
+            i00 = 0, i01 = 0, i10 = 0, i11 = 0;
+
+        if (is_strictly_equal(det2, 0)) return null;
+        i00 = a11/det2; i01 = -a01/det2;
+        i10 = -a10/det2; i11 = a00/det2;
+        return new Matrix(
+        i00, i01, -i00*a02 - i01*a12,
+        i10, i11, -i10*a02 - i11*a12
+        );
+    },
+    transform: function(x, y) {
+        if (1 === arguments.length)
+        {
+            y = x.y;
+            x = x.x;
+        }
+        var self = this;
+        return {
+            x: self.m00*x + self.m01*y + self.m02,
+            y: self.m10*x + self.m11*y + self.m12
+        };
+    }
+};
+Matrix.translate = function(tx, ty) {
+    return new Matrix(
+    1, 0, tx || 0,
+    0, 1, ty || 0
+    );
+};
+Matrix.scale = function(sx, sy, ox, oy) {
+    ox = ox || 0;
+    oy = oy || 0;
+    return new Matrix(
+    sx, 0,  -sx*ox + ox,
+    0,  sy, -sy*oy + oy
+    );
+};
+Matrix.rotate = function(theta, ox, oy) {
+    ox = ox || 0;
+    oy = oy || 0;
+    var cos = stdMath.cos(theta || 0), sin = stdMath.sin(theta || 0);
+    return new Matrix(
+    cos, -sin, ox - cos*ox + sin*oy,
+    sin,  cos, oy - cos*oy - sin*ox
+    );
+};
+Matrix.EYE = function() {
+    return new Matrix(
+    1, 0, 0,
+    0, 1, 0
+    );
+};
+Rasterizer.Matrix = Matrix;*/
+
+function stroke_polyline(set_pixel, points, lw, ld, ldo, lc, lj, ml, xmin, ymin, xmax, ymax)
 {
     var n = points.length, i,
         x1, y1, x2, y2, xp, yp,
-        dx1, dy1, dx2, dy2, w1, w2;
+        dx1, dy1, dx2, dy2, w1, w2, mlw;
     if (n < 6)
     {
         x1 = points[0];
@@ -461,6 +729,7 @@ function stroke_polyline(set_pixel, points, lw, ld, lc, lj, xmin, ymin, xmax, ym
     else
     {
         n -= 2;
+        mlw = ml*lw/2;
         for (i=0; i<n; i+=2)
         {
             x1 = points[i];
@@ -473,7 +742,7 @@ function stroke_polyline(set_pixel, points, lw, ld, lc, lj, xmin, ymin, xmax, ym
             stroke_line(set_pixel, x1, y1, x2, y2, dx2, dy2, w2[0], w2[1], 0 === i ? lc : null, n === i+2 ? lc : null, xmin, ymin, xmax, ymax);
             if (1 < lw && 0 < i)
             {
-                join_lines(set_pixel, xp, yp, x1, y1, x2, y2, dx1, dy1, w1[0], w1[1], dx2, dy2, w2[0], w2[1], lj, xmin, ymin, xmax, ymax);
+                join_lines(set_pixel, xp, yp, x1, y1, x2, y2, dx1, dy1, w1[0], w1[1], dx2, dy2, w2[0], w2[1], lj, mlw, xmin, ymin, xmax, ymax);
             }
             xp = x1;
             yp = y1;
@@ -919,7 +1188,7 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
     fill_triangle(set_pixel, xa, ya, xb, yb, xc, yc, xmin, ymin, xmax, ymax);
     fill_triangle(set_pixel, xb, yb, xc, yc, xd, yd, xmin, ymin, xmax, ymax);
 }
-function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, dy2, wx2, wy2, j, xmin, ymin, xmax, ymax)
+function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, dy2, wx2, wy2, j, mlw, xmin, ymin, xmax, ymax)
 {
     if (('bevel' !== j && 'miter' !== j) || is_almost_equal(dy1*dx2, dy2*dx1, 1e-4)) return;
 
@@ -927,7 +1196,7 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
         wsx1, wsy1, wsx2, wsy2,
         a1, b1, c1, d1,
         a2, b2, c2, d2,
-        p, q, t, s;
+        p, q, t, s, mitl;
 
     if (x1 > x2 && x2 > x3)
     {
@@ -1024,10 +1293,19 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
         {
             t = intersect(b1.x, b1.y, d1.x, d1.y, a2.x, a2.y, c2.x, c2.y);
         }
-        wu_line(set_pixel, p.x, p.y, t.x, t.y, null, null, xmin, ymin, xmax, ymax);
-        wu_line(set_pixel, q.x, q.y, t.x, t.y, null, null, xmin, ymin, xmax, ymax);
-        fill_triangle(set_pixel, s.x, s.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
-        fill_triangle(set_pixel, t.x, t.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
+        mitl = hypot(t.x - s.x, t.y - s.y);
+        if (mitl > mlw)
+        {
+            wu_line(set_pixel, p.x, p.y, q.x, q.y, null, null, xmin, ymin, xmax, ymax);
+            fill_triangle(set_pixel, s.x, s.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
+        }
+        else
+        {
+            wu_line(set_pixel, p.x, p.y, t.x, t.y, null, null, xmin, ymin, xmax, ymax);
+            wu_line(set_pixel, q.x, q.y, t.x, t.y, null, null, xmin, ymin, xmax, ymax);
+            fill_triangle(set_pixel, s.x, s.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
+            fill_triangle(set_pixel, t.x, t.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
+        }
     }
 }
 function arc_points(cx, cy, rx, ry, a, ts, te, fs)
@@ -1082,7 +1360,7 @@ function fill_path(set_pixel, rule, path, xmin, ymin, xmax, ymax)
         i = 0, j, k, d, e, c,
         y1, y2, x, xm, xM, x1, x2, xi,
         insidel, insider,
-        evenodd = 'nonzero' !== rule;
+        evenodd = 'evenodd' === rule;
     y = stdMath.max(ymin, stdMath.round(y));
     yM = stdMath.min(ymax, stdMath.round(yM));
     for (; y<=yM; ++y)
@@ -1193,6 +1471,137 @@ function fill_path(set_pixel, rule, path, xmin, ymin, xmax, ymax)
             }
         }
     }
+}
+function point_in_stroke(x, y, path)
+{
+    var i, j, p, m, n = path.length,
+        x1, y1, x2, y2;
+    for (i=0; i<n; ++i)
+    {
+        p = path[i];
+        m = p.length - 2;
+        if (0 < m)
+        {
+            for (j=0; j<m; j+=2)
+            {
+                x1 = p[j];
+                y1 = p[j+1];
+                x2 = p[j+2];
+                y2 = p[j+3];
+                if (is_almost_equal((y2 - y1)*(x - x1), (y - y1)*(x2 - x1), 1e-4))
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+function point_in_path(x, y, path, rule)
+{
+    var edges = path_to_segments(path);
+    if (!edges.length || y < edges.ymin || y > edges.ymax) return false;
+    edges.sort(asc);
+    var n = edges.length,
+        edg = new Array(n),
+        i = 0, j, k, d, e, c,
+        y1, y2, xm, xM, x1, x2, xi,
+        insidel, insider,
+        evenodd = 'evenodd' === rule;
+    while (i < n && edges[i][3] < y) ++i;
+    if (i >= n) return false;
+    e = d = edges[i];
+    if (e[1] > y) return false;
+    x1 = e[0];
+    x2 = e[2];
+    y1 = e[1];
+    y2 = e[3];
+    if (is_strictly_equal(y1, y2))
+    {
+        xi = false;
+        xm = stdMath.min(x1, x2);
+        xM = stdMath.max(x1, x2);
+    }
+    else
+    {
+        xi = (x2 - x1)*(y - y1)/(y2 - y1) + x1;
+        xm = xi;
+        xM = xi;
+    }
+    // store intersection point to be used later
+    e[6] = xi;
+    e[7] = 0;
+    edg[0] = e;
+    k = 1;
+    // get rest edges that intersect at this y
+    for (j=i+1; j<n && edges[j][1]<=y; ++j)
+    {
+        e = edges[j];
+        if (e[3] >= y)
+        {
+            x1 = e[0];
+            x2 = e[2];
+            y1 = e[1];
+            y2 = e[3];
+            if (is_strictly_equal(y1, y2))
+            {
+                xi = false;
+                xm = stdMath.min(xm, x1, x2);
+                xM = stdMath.max(xM, x1, x2);
+            }
+            else
+            {
+                xi = (x2 - x1)*(y - y1)/(y2 - y1) + x1;
+                xm = stdMath.min(xm, xi);
+                xM = stdMath.max(xM, xi);
+            }
+            // store intersection point to be used later
+            e[6] = xi;
+            e[7] = 0;
+            edg[k++] = e;
+        }
+    }
+    // some edges found are redundant, mark them
+    c = redundant(edg, k);
+    if (c+2 > k) return false === edg[0][6] ? false : is_almost_equal(x, edg[0][6]);
+    if (xm > xM || x < xm || x > xM) return false;
+    if (evenodd)
+    {
+        // evenodd fill rule
+        for (insidel=false,insider=false,j=0; j<k; ++j)
+        {
+            e = edg[j];
+            if (e[7]) continue; // redundant
+            xi = e[6];
+            if (false === xi) continue; // no intersection
+            // intersects segment on the left side
+            if (xi <= x) insidel = !insidel;
+            // intersects segment on the right side
+            if (xi >= x) insider = !insider;
+        }
+        if (insidel && insider) return true;
+    }
+    else
+    {
+        // nonzero fill rule
+        for (insidel=0,insider=0,j=0; j<k; ++j)
+        {
+            e = edg[j];
+            if (e[7]) continue; // redundant
+            xi = e[6];
+            if (false === xi) continue; // no intersection
+            if (xi < x || xi > x)
+            {
+                c = wn(x, y, e[0 > e[4] ? 2 : 0], e[0 > e[4] ? 3 : 1], e[0 > e[4] ? 0 : 2], e[0 > e[4] ? 1 : 3]);
+                // intersects segment on the left side
+                if (xi <= x) insidel += c;
+                // intersects segment on the right side
+                if (xi >= x) insider += c;
+            }
+        }
+        if (insidel && insider) return true;
+    }
+    return false;
 }
 
 // utilities -----------------------
