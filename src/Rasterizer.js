@@ -1,6 +1,6 @@
 /**
 *   Rasterizer
-*   rasterize, draw and fill lines, rectangles and curves
+*   rasterize, stroke and fill lines, rectangles, curves and paths
 *
 *   @version 0.9.6
 *   https://github.com/foo123/Rasterizer
@@ -37,7 +37,6 @@ function Rasterizer(width, height, set_rgba_at)
             return width;
         },
         set: function(w) {
-           width = +w;
         }
     });
     def(self, 'height', {
@@ -45,7 +44,6 @@ function Rasterizer(width, height, set_rgba_at)
             return height;
         },
         set: function(h) {
-           height = +h;
         }
     });
     self.getContext = function(type) {
@@ -310,7 +308,7 @@ function RenderingContext2D(width, height, set_rgba_at)
     self.setTransform = function(a, b, c, d, e, f) {
         if (1 < arguments.length)
         {
-            transform = new Matrix2D(a, c, e, b, d, f);
+            transform = new Matrix2D(a, b, e, c, d, f);
         }
         else if ((null != a.m00) && a.clone)
         {
@@ -810,32 +808,92 @@ Path2D[PROTO] = {
 };
 RenderingContext2D.Path2D = Path2D;
 
-function Matrix2D(m00, m01, m02, m10, m11, m12)
+function Matrix2D(m11, m12, m13, m21, m22, m23)
 {
     var self = this;
     if (arguments.length)
     {
-        self.m00 = m00;
-        self.m01 = m01;
-        self.m02 = m02;
-        self.m10 = m10;
         self.m11 = m11;
         self.m12 = m12;
+        self.m13 = m13;
+        self.m21 = m21;
+        self.m22 = m22;
+        self.m23 = m23;
     }
+    // aliases
+    // https://developer.mozilla.org/en-US/docs/Web/API/DOMMatrix
+    def(self, 'a', {
+        get: function() {
+            return self.m11;
+        },
+        set: function(a) {
+            self.m11 = a;
+        }
+    });
+    def(self, 'c', {
+        get: function() {
+            return self.m12;
+        },
+        set: function(c) {
+            self.m12 = c;
+        }
+    });
+    def(self, 'e', {
+        get: function() {
+            return self.m13;
+        },
+        set: function(e) {
+            self.m13 = e;
+        }
+    });
+    def(self, 'b', {
+        get: function() {
+            return self.m21;
+        },
+        set: function(b) {
+            self.m21 = b;
+        }
+    });
+    def(self, 'd', {
+        get: function() {
+            return self.m22;
+        },
+        set: function(d) {
+            self.m22 = d;
+        }
+    });
+    def(self, 'f', {
+        get: function() {
+            return self.m23;
+        },
+        set: function(f) {
+            self.m23 = f;
+        }
+    });
 }
 Matrix2D[PROTO] = {
     constructor: Matrix2D,
-    m00: 1,
-    m01: 0,
-    m02: 0,
-    m10: 0,
+    is2D: true,
     m11: 1,
     m12: 0,
+    m13: 0,
+    m21: 0,
+    m22: 1,
+    m23: 0,
+    m31: 0,
+    m32: 0,
+    m33: 1,
+    a: null,
+    b: null,
+    c: null,
+    d: null,
+    e: null,
+    f: null,
     clone: function() {
         var self = this;
         return new Matrix2D(
-        self.m00, self.m01, self.m02,
-        self.m10, self.m11, self.m12
+        self.m11, self.m12, self.m13,
+        self.m21, self.m22, self.m23
         );
     },
     mul: function(other) {
@@ -843,19 +901,19 @@ Matrix2D[PROTO] = {
         if (other instanceof Matrix2D)
         {
             return new Matrix2D(
-            self.m00*other.m00 + self.m01*other.m10,
-            self.m00*other.m01 + self.m01*other.m11,
-            self.m00*other.m02 + self.m01*other.m12 + self.m02,
-            self.m10*other.m00 + self.m11*other.m10,
-            self.m10*other.m01 + self.m11*other.m11,
-            self.m10*other.m02 + self.m11*other.m12 + self.m12
+            self.m11*other.m11 + self.m12*other.m21,
+            self.m11*other.m12 + self.m12*other.m22,
+            self.m11*other.m13 + self.m12*other.m23 + self.m13,
+            self.m21*other.m11 + self.m22*other.m21,
+            self.m21*other.m12 + self.m22*other.m22,
+            self.m21*other.m13 + self.m22*other.m23 + self.m23
             );
         }
     },
     inv: function() {
         var self = this,
-            a00 = self.m00, a01 = self.m01, a02 = self.m02,
-            a10 = self.m10, a11 = self.m11, a12 = self.m12,
+            a00 = self.m11, a01 = self.m12, a02 = self.m13,
+            a10 = self.m21, a11 = self.m22, a12 = self.m23,
             det2 = a00*a11 - a01*a10,
             i00 = 0, i01 = 0, i10 = 0, i11 = 0;
 
@@ -875,8 +933,8 @@ Matrix2D[PROTO] = {
         }
         var self = this;
         return [
-            self.m00*x + self.m01*y + self.m02,
-            self.m10*x + self.m11*y + self.m12
+            self.m11*x + self.m12*y + self.m13,
+            self.m21*x + self.m22*y + self.m23
         ];
     }
 };
@@ -991,7 +1049,7 @@ function stroke_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, xmin, ym
 {
     if (0 === wx && 0 === wy)
     {
-        wu_line(set_pixel, x1, y1, x2, y2, dx, dy, xmin, ymin, xmax, ymax);
+        wu_line(set_pixel, x1, y1, x2, y2, dx, dy, xmin, ymin, xmax, ymax, true, true);
     }
     else
     {
@@ -1210,7 +1268,7 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
         for (; x<=xx; ++x) set_pixel(x, y, 1);
     }
 }
-function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, xmin, ymin, xmax, ymax)
+function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, xmin, ymin, xmax, ymax, gs, ge)
 {
     var xm = stdMath.min(xs, xe), xM = stdMath.max(xs, xe),
         ym = stdMath.min(ys, ye), yM = stdMath.max(ys, ye);
@@ -1281,7 +1339,7 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, xmin, ymin, xmax, ymax)
     // handle first endpoint
     xend = stdMath.round(xs);
     yend = ys + gradient * (xend - xs);
-    gap = 1 - (xs + e - stdMath.floor(xs + e));
+    gap = gs ? 1 : (1 - (xs + e - stdMath.floor(xs + e)));
     x1 = xend;
     y1 = stdMath.floor(yend);
     fpart = yend - y1;
@@ -1302,7 +1360,7 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, xmin, ymin, xmax, ymax)
     // handle second endpoint
     xend = stdMath.round(xe);
     yend = ye + gradient * (xend - xe);
-    gap = xe + e - stdMath.floor(xe + e);
+    gap = ge ? 1 : (xe + e - stdMath.floor(xe + e));
     x2 = xend;
     y2 = stdMath.floor(yend);
     fpart = yend - y2;
@@ -1993,9 +2051,10 @@ function path_to_segments(polylines)
         if (!p) continue;
         n = p.length - 2;
         if (0 >= n) continue;
+        ++k; l = 1;
         for (i=0; i<n; i+=2)
         {
-            if (p[i].params && p[i].params.type) {++k; l=0;}
+            if (p[i].params && p[i].params.type) {++k; l = 1;}
             ymin = stdMath.min(ymin, p[i+1]);
             ymax = stdMath.max(ymax, p[i+1]);
             if (p[i+1] > p[i+3])
@@ -2010,7 +2069,6 @@ function path_to_segments(polylines)
         }
         ymin = stdMath.min(ymin, p[n+1]);
         ymax = stdMath.max(ymax, p[n+1]);
-        ++k; l=0;
     }
     segments.ymin = ymin;
     segments.ymax = ymax;
@@ -2033,6 +2091,7 @@ function redundant(edg, n, y)
                 && is_almost_equal(e[2], f[2], 1e-5)
                 && is_almost_equal(e[3], f[3], 1e-5))
                 || (is_almost_equal(e[3], f[1], 1e-6))
+                || (is_almost_equal(e[1], f[3], 1e-6))
             )
             {
                 f[8] = 1;
