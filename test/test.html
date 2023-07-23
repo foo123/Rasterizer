@@ -91,14 +91,15 @@ function drawLine(x1, y1, x2, y2, lw, ld, lc)
 
     const imData = ctx2.getImageData(0, 0, w, h);
     const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
-    r.beginPath();
-    r.strokeStyle = [0,0,0];
-    r.lineCap = lc;
-    r.lineWidth = lw;
-    r.setLineDash(ld);
-    r.moveTo(x1, y1);
-    r.lineTo(x2, y2);
-    r.stroke();
+    const ctx = r.getContext("2d");
+    ctx.beginPath();
+    ctx.strokeStyle = [0,0,0,1];
+    ctx.lineCap = lc;
+    ctx.lineWidth = lw;
+    ctx.setLineDash(ld);
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
     ctx2.putImageData(imData, 0, 0);
 }
 function drawPolyline(x1, y1, x2, y2, x3, y3, lw, ld, lc, lj, ml)
@@ -140,17 +141,18 @@ function drawPolyline(x1, y1, x2, y2, x3, y3, lw, ld, lc, lj, ml)
 
     const imData = ctx2.getImageData(0, 0, w, h);
     const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
-    r.beginPath();
-    r.strokeStyle = [0,0,0, 0.5];
-    r.lineCap = lc;
-    r.lineJoin = lj;
-    r.miterLimit = ml;
-    r.lineWidth = lw;
-    r.setLineDash(ld);
-    r.moveTo(x1, y1); // move creates new polyline
-    r.lineTo(x2, y2);
-    r.lineTo(x3, y3);
-    r.stroke();
+    const ctx = r.getContext("2d");
+    ctx.beginPath();
+    ctx.strokeStyle = [0,0,0, 0.5];
+    ctx.lineCap = lc;
+    ctx.lineJoin = lj;
+    ctx.miterLimit = ml;
+    ctx.lineWidth = lw;
+    ctx.setLineDash(ld);
+    ctx.moveTo(x1, y1); // move creates new polyline
+    ctx.lineTo(x2, y2);
+    ctx.lineTo(x3, y3);
+    ctx.stroke();
     ctx2.putImageData(imData, 0, 0);
 }
 function drawGradientLine(x1, y1, x2, y2, lw, ld, lc)
@@ -189,14 +191,15 @@ function drawGradientLine(x1, y1, x2, y2, lw, ld, lc)
 
     const imData = ctx2.getImageData(0, 0, w, h);
     const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
-    r.beginPath();
-    r.strokeStyle = grad2.getColorAt.bind(grad2);
-    r.lineCap = lc;
-    r.lineWidth = lw;
-    r.setLineDash(ld);
-    r.moveTo(x1, y1);
-    r.lineTo(x2, y2);
-    r.stroke();
+    const ctx = r.getContext("2d");
+    ctx.beginPath();
+    ctx.strokeStyle = grad2.getColorAt.bind(grad2);
+    ctx.lineCap = lc;
+    ctx.lineWidth = lw;
+    ctx.setLineDash(ld);
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
     ctx2.putImageData(imData, 0, 0);
 }
 function drawGradientArc(cx, cy, rx, ry, a, t0, t1, fs, lw, ld, lc, lj)
@@ -235,14 +238,148 @@ function drawGradientArc(cx, cy, rx, ry, a, t0, t1, fs, lw, ld, lc, lj)
 
     const imData = ctx2.getImageData(0, 0, w, h);
     const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
-    r.beginPath();
-    r.strokeStyle = grad2.getColorAt.bind(grad2);
-    r.lineCap = lc;
-    r.lineJoin = lj;
-    r.lineWidth = lw;
-    r.setLineDash(ld);
-    r.ellipse(cx, cy, rx, ry, a, t0, t1, fs);
-    r.stroke();
+    const ctx = r.getContext("2d");
+    ctx.beginPath();
+    ctx.strokeStyle = grad2.getColorAt.bind(grad2);
+    ctx.lineCap = lc;
+    ctx.lineJoin = lj;
+    ctx.lineWidth = lw;
+    ctx.setLineDash(ld);
+    ctx.ellipse(cx, cy, rx, ry, a, t0, t1, fs);
+    ctx.stroke();
+    ctx2.putImageData(imData, 0, 0);
+}
+function drawGradientCircles()
+{
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+    test1.appendChild(text('Circular Arcs'));
+    test2.appendChild(text('Circular Arcs'));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+
+    const ctx1 = canvas1.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
+    const grad1 = addColorStops(ctx1.createLinearGradient(20, 20, 180, 180));
+    const grad2 = addColorStops(Gradient.createLinearGradient(20, 20, 180, 180));
+
+    ctx1.beginPath();
+    ctx1.strokeStyle = grad1;
+    ctx1.lineWidth = 1;
+    ctx1.arc(30, 50, 20, 0, Math.PI, false);
+    ctx1.arc(60, 50, 20, 0, Math.PI, true);
+    ctx1.stroke();
+
+    const imData = ctx2.getImageData(0, 0, w, h);
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
+    const ctx = r.getContext("2d");
+    ctx.beginPath();
+    ctx.strokeStyle = grad2.getColorAt.bind(grad2);
+    ctx.lineWidth = 1;
+    ctx.arc(30, 50, 20, 0, Math.PI, false);
+    ctx.arc(60, 50, 20, 0, Math.PI, true);
+    ctx.stroke();
+    ctx2.putImageData(imData, 0, 0);
+}
+function drawArcTo()
+{
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+    test1.appendChild(text('ArcTo'));
+    test2.appendChild(text('ArcTo'));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+
+    const ctx1 = canvas1.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
+
+    // Tangential lines
+    ctx1.beginPath();
+    ctx1.strokeStyle = "#555";
+    ctx1.moveTo(180, 20);
+    ctx1.lineTo(180, 130);
+    ctx1.lineTo(50, 20);
+    ctx1.stroke();
+
+    // Arc
+    ctx1.beginPath();
+    ctx1.strokeStyle = "#000";
+    ctx1.lineWidth = 5;
+    ctx1.moveTo(180, 20);
+    ctx1.arcTo(180, 130, 50, 20, 40);
+    ctx1.stroke();
+
+    const imData = ctx2.getImageData(0, 0, w, h);
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
+    const ctx = r.getContext("2d");
+    // Tangential lines
+    ctx.beginPath();
+    ctx.strokeStyle = [0x55, 0x55, 0x55];
+    ctx.moveTo(180, 20);
+    ctx.lineTo(180, 130);
+    ctx.lineTo(50, 20);
+    ctx.stroke();
+
+    // Arc
+    ctx.beginPath();
+    ctx.strokeStyle = [0,0,0];
+    ctx.lineWidth = 5;
+    ctx.moveTo(180, 20);
+    ctx.arcTo(180, 130, 50, 20, 40);
+    ctx.stroke();
+
+    ctx2.putImageData(imData, 0, 0);
+}
+function drawRoundRect()
+{
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+    test1.appendChild(text('RoundRect'));
+    test2.appendChild(text('RoundRect'));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+
+    const ctx1 = canvas1.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
+
+    // Rounded rectangle with 2 different radii
+    ctx1.strokeStyle = "red";
+    ctx1.beginPath();
+    ctx1.roundRect(10, 10, 100, 150, [10, 40]);
+    ctx1.stroke();
+
+    const imData = ctx2.getImageData(0, 0, w, h);
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
+    const ctx = r.getContext("2d");
+    ctx.strokeStyle = [0xff,0,0];
+    ctx.beginPath();
+    ctx.roundRect(10, 10, 100, 150, [10, 40]);
+    ctx.stroke();
+
     ctx2.putImageData(imData, 0, 0);
 }
 function drawGradientBezier(c, lw, ld, lc, lj)
@@ -282,15 +419,16 @@ function drawGradientBezier(c, lw, ld, lc, lj)
 
     const imData = ctx2.getImageData(0, 0, w, h);
     const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
-    r.beginPath();
-    r.strokeStyle = grad2.getColorAt.bind(grad2);
-    r.lineCap = lc;
-    r.lineJoin = lj;
-    r.lineWidth = lw;
-    r.setLineDash(ld);
-    r.moveTo(c[0], c[1]);
-    r.bezierCurveTo(c[2], c[3], c[4], c[5], c[6], c[7]);
-    r.stroke();
+    const ctx = r.getContext("2d");
+    ctx.beginPath();
+    ctx.strokeStyle = grad2.getColorAt.bind(grad2);
+    ctx.lineCap = lc;
+    ctx.lineJoin = lj;
+    ctx.lineWidth = lw;
+    ctx.setLineDash(ld);
+    ctx.moveTo(c[0], c[1]);
+    ctx.bezierCurveTo(c[2], c[3], c[4], c[5], c[6], c[7]);
+    ctx.stroke();
     ctx2.putImageData(imData, 0, 0);
 }
 function fillGradientBezier(c, fillRule)
@@ -325,11 +463,12 @@ function fillGradientBezier(c, fillRule)
 
     const imData = ctx2.getImageData(0, 0, w, h);
     const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
-    r.beginPath();
-    r.fillStyle = grad2.getColorAt.bind(grad2);
-    r.moveTo(c[0], c[1]);
-    r.bezierCurveTo(c[2], c[3], c[4], c[5], c[6], c[7]);
-    r.fill(fillRule);
+    const ctx = r.getContext("2d");
+    ctx.beginPath();
+    ctx.fillStyle = grad2.getColorAt.bind(grad2);
+    ctx.moveTo(c[0], c[1]);
+    ctx.bezierCurveTo(c[2], c[3], c[4], c[5], c[6], c[7]);
+    ctx.fill(fillRule);
     ctx2.putImageData(imData, 0, 0);
 }
 function fillGradientDisk(cx, cy, r1, r2, fillRule, same)
@@ -364,11 +503,12 @@ function fillGradientDisk(cx, cy, r1, r2, fillRule, same)
 
     const imData = ctx2.getImageData(0, 0, w, h);
     const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
-    r.beginPath();
-    r.fillStyle = grad2.getColorAt.bind(grad2);
-    r.ellipse(cx, cy, r2, r2, 0, 0, 2*Math.PI, false);
-    r.ellipse(cx, cy, r1, r1, 0, 0, 2*Math.PI, same ? false : true);
-    r.fill(fillRule);
+    const ctx = r.getContext("2d");
+    ctx.beginPath();
+    ctx.fillStyle = grad2.getColorAt.bind(grad2);
+    ctx.ellipse(cx, cy, r2, r2, 0, 0, 2*Math.PI, false);
+    ctx.ellipse(cx, cy, r1, r1, 0, 0, 2*Math.PI, same ? false : true);
+    ctx.fill(fillRule);
     ctx2.putImageData(imData, 0, 0);
 }
 function globalAlpha()
@@ -414,24 +554,25 @@ function globalAlpha()
 
     const imData = ctx2.getImageData(0, 0, w, h);
     const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
+    const ctx = r.getContext("2d");
     // Draw background
-    r.fillStyle = [0xff, 0xdd, 0, 1];
-    r.fillRect(0, 0, 75, 75);
-    r.fillStyle = [0x66, 0xcc, 0, 1];
-    r.fillRect(75, 0, 75, 75);
-    r.fillStyle = [0, 0x99, 0xff, 1];
-    r.fillRect(0, 75, 75, 75);
-    r.fillStyle = [0xff, 0x33, 0, 1];
-    r.fillRect(75, 75, 75, 75);
-    r.fillStyle = [0xff, 0xff, 0xff, 1];
+    ctx.fillStyle = [0xff, 0xdd, 0, 1];
+    ctx.fillRect(0, 0, 75, 75);
+    ctx.fillStyle = [0x66, 0xcc, 0, 1];
+    ctx.fillRect(75, 0, 75, 75);
+    ctx.fillStyle = [0, 0x99, 0xff, 1];
+    ctx.fillRect(0, 75, 75, 75);
+    ctx.fillStyle = [0xff, 0x33, 0, 1];
+    ctx.fillRect(75, 75, 75, 75);
+    ctx.fillStyle = [0xff, 0xff, 0xff, 1];
     // Set transparency value
-    r.globalAlpha = 0.2;
+    ctx.globalAlpha = 0.2;
     // Draw transparent circles
     for (let i = 0; i < 7; ++i)
     {
-      r.beginPath();
-      r.arc(75, 75, 10 + 10 * i, 0, Math.PI * 2, true);
-      r.fill();
+      ctx.beginPath();
+      ctx.arc(75, 75, 10 + 10 * i, 0, Math.PI * 2, true);
+      ctx.fill();
     }
     ctx2.putImageData(imData, 0, 0);
 }
@@ -459,7 +600,12 @@ drawPolyline(20, 10, 40, 60, 10, 70, 20, [], 'butt', 'miter');
 drawPolyline(20, 70, 40, 20, 70, 60, 20, [], 'butt', 'miter');
 drawPolyline(20, 10, 40, 70, 70, 20, 20, [], 'butt', 'miter');
 drawPolyline(70, 20, 40, 70, 20, 10, 20, [], 'butt', 'miter');
-drawPolyline(10, 10, 15, 70, 20, 10, 20, [], 'butt', 'miter', 1);
+drawPolyline(10, 10, 15, 70, 25, 10, 20, [], 'butt', 'miter', 100);
+drawPolyline(10, 10, 15, 70, 25, 10, 20, [], 'butt', 'miter', 1);
+drawGradientCircles();
+drawArcTo();
+drawRoundRect();
+drawGradientArc(50, 50, 20, 40, 30*Math.PI/180, 1, Math.PI/2, false, 2, [], 'butt', 'bevel');
 drawGradientArc(50, 50, 20, 40, 30*Math.PI/180, 1, Math.PI/2, true, 2, [], 'butt', 'bevel');
 drawGradientBezier([10, 10, 200, 100, 10, 100, 70, 10], 4, [], 'butt', 'bevel');
 fillGradientBezier([10, 10, 200, 100, 10, 100, 70, 10], 'nonzero');

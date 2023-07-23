@@ -2,7 +2,7 @@
 *   Rasterizer
 *   rasterize, draw and fill lines, rectangles and curves
 *
-*   @version 0.9.5
+*   @version 0.9.6
 *   https://github.com/foo123/Rasterizer
 *
 **/
@@ -19,7 +19,7 @@ else if (!(name in root)) /* Browser/WebWorker/.. */
     /* module factory */        function ModuleFactory__Rasterizer(undef) {
 "use strict";
 
-var def = Object.defineProperty,
+var def = Object.defineProperty, PROTO = 'prototype',
     stdMath = Math, INF = Infinity, sqrt2 = stdMath.sqrt(2),
     PI = stdMath.PI, TWO_PI = 2*PI, HALF_PI = PI/2,
     NUM_POINTS = 6, MIN_LEN = sqrt2, PIXEL_SIZE = 0.5,
@@ -30,218 +30,35 @@ function Rasterizer(width, height, set_rgba_at)
     var self = this;
     if (!(self instanceof Rasterizer)) return new Rasterizer(width, height, set_rgba_at);
 
-    var get_stroke_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]),
-        get_fill_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]),
-        lineCap = 'butt', lineJoin = 'miter', miterLimit = 10.0,
-        lineWidth = 1, lineDash = [], lineDashOffset = 0, alpha = 1.0,
-        paths = [new Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, alpha)];
+    var ctx2d = new RenderingContext2D(width, height, set_rgba_at);
 
-    def(self, 'strokeStyle', {
+    def(self, 'width', {
         get: function() {
-            return '';
+            return width;
         },
-        set: function(c) {
-           get_stroke_at = Rasterizer.getRGBAFrom(c);
-           paths[paths.length-1].strokeStyle = get_stroke_at;
+        set: function(w) {
+           width = +w;
         }
     });
-    def(self, 'fillStyle', {
+    def(self, 'height', {
         get: function() {
-            return '';
+            return height;
         },
-        set: function(c) {
-           get_fill_at = Rasterizer.getRGBAFrom(c);
-           paths[paths.length-1].fillStyle = get_fill_at;
+        set: function(h) {
+           height = +h;
         }
     });
-    def(self, 'lineWidth', {
-        get: function() {
-            return lineWidth;
-        },
-        set: function(lw) {
-            lw = stdMath.abs((+lw) || 0);
-            if (0 < lw)
-            {
-                paths[paths.length-1].lineWidth = lineWidth = lw;
-            }
-        }
-    });
-    def(self, 'lineCap', {
-        get: function() {
-            return lineCap;
-        },
-        set: function(lc) {
-            lc = String(lc).toLowerCase();
-            if (-1 !== ['butt','square'].indexOf(lc))
-            {
-                // only 'butt' and 'square' lineCap supported
-                paths[paths.length-1].lineCap = lineCap = lc;
-            }
-            else
-            {
-                err('"'+lc+'" lineCap is not supported!');
-            }
-        }
-    });
-    def(self, 'lineJoin', {
-        get: function() {
-            return lineJoin;
-        },
-        set: function(lj) {
-            lj = String(lj).toLowerCase();
-            if (-1 !== ['miter','bevel'].indexOf(lj))
-            {
-                // only 'miter' and 'bevel' lineJoin supported
-                paths[paths.length-1].lineJoin = lineJoin = lj;
-            }
-            else
-            {
-                err('"'+lj+'" lineJoin is not supported!');
-            }
-        }
-    });
-    def(self, 'miterLimit', {
-        get: function() {
-            return miterLimit;
-        },
-        set: function(ml) {
-            ml = +ml;
-            if (0 < ml)
-            {
-                paths[paths.length-1].miterLimit = miterLimit = ml;
-            }
-        }
-    });
-    def(self, 'lineDashOffset', {
-        get: function() {
-            return lineDashOffset;
-        },
-        set: function(ldo) {
-            ldo = +ldo;
-            if (0 < ldo)
-            {
-                paths[paths.length-1].lineDashOffset = lineDashOffset = ldo;
-            }
-        }
-    });
-    def(self, 'lineDash', {
-        get: function() {
-            return lineDash.slice();
-        },
-        set: function(ld) {
-            ld = [].concat(ld);
-            if (ld.length & 1) ld = ld.concat(ld);
-            paths[paths.length-1].lineDash = lineDash = ld;
-        }
-    });
-    self.setLineDash = function(ld) {
-        self.lineDash = ld;
-    };
-    def(self, 'globalAlpha', {
-        get: function() {
-            return alpha;
-        },
-        set: function(a) {
-            a = +a;
-            if (0 <= a && a <= 1)
-            {
-                paths[paths.length-1].globalAlpha = alpha = a;
-            }
-        }
-    });
-
-    self.strokeRect = function(x, y, w, h) {
-        paths[paths.length-1].strokeRect(x, y, w, h);
-    };
-    self.fillRect = function(x, y, w, h) {
-        paths[paths.length-1].fillRect(x, y, w, h);
-    };
-    self.beginPath = function() {
-        paths.push(new Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, alpha));
-    };
-    self.closePath = function() {
-        paths[paths.length-1].closePath();
-    };
-    self.moveTo = function(x, y) {
-        paths[paths.length-1].moveTo(x, y);
-    };
-    self.lineTo = function(x, y) {
-        paths[paths.length-1].lineTo(x, y);
-    };
-    self.rect = function(x, y, w, h) {
-        paths[paths.length-1].rect(x, y, w, h);
-    };
-    self.arc = function(cx, cy, r, start, end, ccw) {
-        paths[paths.length-1].arc(cx, cy, r, start, end, ccw);
-    };
-    self.ellipse = function(cx, cy, rx, ry, angle, start, end, fs) {
-        paths[paths.length-1].ellipse(cx, cy, rx, ry, angle, start, end, fs);
-    };
-    self.quadraticCurveTo = function(x1, y1, x2, y2) {
-        paths[paths.length-1].quadraticCurveTo(x1, y1, x2, y2);
-    };
-    self.bezierCurveTo = function(x1, y1, x2, y2, x3, y3) {
-        paths[paths.length-1].bezierCurveTo(x1, y1, x2, y2, x3, y3);
-    };
-    self.stroke = function() {
-        //paths.forEach(function(p) {p.stroke();});
-        paths[paths.length-1].stroke();
-    };
-    self.fill = function(fillRule) {
-        fillRule = String(fillRule || 'nonzero').toLowerCase();
-        if (-1 === ['nonzero','evenodd'].indexOf(fillRule)) fillRule = 'nonzero';
-        //paths.forEach(function(p) {p.fill(fillRule);});
-        paths[paths.length-1].fill(fillRule);
-    };
-    self.isPointInStroke = function(x, y) {
-        return paths[paths.length-1].isPointInStroke(x, y);
-    };
-    self.isPointInPath = function(x, y, fillRule) {
-        fillRule = String(fillRule || 'nonzero').toLowerCase();
-        if (-1 === ['nonzero','evenodd'].indexOf(fillRule)) fillRule = 'nonzero';
-        return paths[paths.length-1].isPointInPath(x, y, fillRule);
+    self.getContext = function(type) {
+        if ('2d' === type) return ctx2d;
+        err('Unsupported context "'+type+'"');
     };
 }
-Rasterizer.VERSION = '0.9.5';
-Rasterizer.prototype = {
+Rasterizer.VERSION = '0.9.6';
+Rasterizer[PROTO] = {
     constructor: Rasterizer,
-    strokeStyle: null,
-    fillStyle: null,
-    lineWidth: null,
-    lineCap: null,
-    lineJoin: null,
-    miterLimit: null,
-    lineDash: null,
-    lineDashOffset: null,
-    setLineDash: null,
-    globalAlpha: null,
-    strokeRect: null,
-    fillRect: null,
-    beginPath: null,
-    closePath: null,
-    moveTo: null,
-    lineTo: null,
-    rect: null,
-    arc: null,
-    ellipse: null,
-    quadraticCurveTo: null,
-    bezierCurveTo: null,
-    stroke: null,
-    fill: null,
-    isPointInStroke: null,
-    isPointInPath: null,
-    createImageData: function(width, height) {
-        return Rasterizer.createImageData(width, height);
-    },
-    strokeText: function() {
-        err('Not Implemented!');
-    },
-    fillText: function() {
-        err('Not Implemented!');
-    },
-    measureText: function() {
-        err('Not Implemented!');
-    }
+    width: null,
+    height: null,
+    getContext: null
 };
 Rasterizer.createImageData = function(width, height) {
     return {
@@ -269,14 +86,14 @@ Rasterizer.getRGBAFrom = function(RGBA) {
 Rasterizer.setRGBATo = function(IMG) {
     if ('function' === typeof IMG)
     {
-        return function(x, y, r, g, b, af) {
-            if (0 < af) IMG(x, y, r, g, b, af);
+        return function(x, y, r, g, b, af, op) {
+            if (0 < af) IMG(x, y, r, g, b, af, op);
         };
     }
     else
     {
         var width = IMG.width, height = IMG.height, data = IMG.data;
-        return function(x, y, r, g, b, af) {
+        return function(x, y, r, g, b, af, op) {
             if (0 <= x && x < width && 0 <= y && y < height && 0 < af)
             {
                 var index = (x + width*y) << 2,
@@ -284,35 +101,45 @@ Rasterizer.setRGBATo = function(IMG) {
                     g0 = data[index+1],
                     b0 = data[index+2],
                     a0 = data[index+3]/255,
-                    a1 = af,
-                    ao = a1 + a0*(1 - a1);
-                // do alpha composition (over operation)
-                if (0 < ao)
+                    a1 = af, ao;
+                switch(op)
                 {
-                    data[index  ] = clamp(stdMath.round((r*a1 + r0*a0*(1 - a1))/ao), 0, 255);
-                    data[index+1] = clamp(stdMath.round((g*a1 + g0*a0*(1 - a1))/ao), 0, 255);
-                    data[index+2] = clamp(stdMath.round((b*a1 + b0*a0*(1 - a1))/ao), 0, 255);
-                    data[index+3] = clamp(stdMath.round(255*ao), 0, 255);
+                    case 'source-over':
+                    default:
+                    // do alpha composition (over operation)
+                    ao = a1 + a0*(1 - a1);
+                    if (0 < ao)
+                    {
+                        data[index  ] = clamp(stdMath.round((r*a1 + r0*a0*(1 - a1))/ao), 0, 255);
+                        data[index+1] = clamp(stdMath.round((g*a1 + g0*a0*(1 - a1))/ao), 0, 255);
+                        data[index+2] = clamp(stdMath.round((b*a1 + b0*a0*(1 - a1))/ao), 0, 255);
+                        data[index+3] = clamp(stdMath.round(255*ao), 0, 255);
+                    }
+                    break;
                 }
             }
         };
     }
 };
 
-function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, alpha)
+function RenderingContext2D(width, height, set_rgba_at)
 {
-    var self = this, d = [[0, 0]],
+    var self = this,
+        get_stroke_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]),
+        get_fill_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]),
         canvas, mult = 1, set_pixel,
         canvas_reset, canvas_output,
-        stroke_pixel, fill_pixel;
-
-    lineWidth = lineWidth || 1;
-    lineDash = lineDash || [];
-    lineDashOffset = lineDashOffset || 0;
-    lineCap = lineCap || 'butt';
-    lineJoin = lineJoin || 'miter';
-    miterLimit = miterLimit || 10.0;
-    alpha = null == alpha ? 1.0 : alpha;
+        stroke_pixel, fill_pixel,
+        lineCap = 'butt',
+        lineJoin = 'miter',
+        miterLimit = 10.0,
+        lineWidth = 1,
+        lineDash = [],
+        lineDashOffset = 0,
+        transform = Matrix2D.EYE(),
+        alpha = 1.0,
+        op = 'source-over',
+        currentPath = new Path2D(transform);
 
     canvas_reset = function canvas_reset() {
         // sparse array/hash
@@ -335,26 +162,27 @@ function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth,
     };
     stroke_pixel = function stroke_pixel(x, y, i) {
         var c = get_stroke_at(x, y), af = 3 < c.length ? c[3] : 1.0;
-        if (0 < af) set_rgba_at(x, y, c[0], c[1], c[2], af*i);
+        if (0 < af) set_rgba_at(x, y, c[0], c[1], c[2], af*i, op);
     };
     fill_pixel = function fill_pixel(x, y, i) {
         var c = get_fill_at(x, y), af = 3 < c.length ? c[3] : 1.0;
-        if (0 < af) set_rgba_at(x, y, c[0], c[1], c[2], af*i);
+        if (0 < af) set_rgba_at(x, y, c[0], c[1], c[2], af*i, op);
     };
+
     def(self, 'strokeStyle', {
         get: function() {
-            return;
+            return '';
         },
-        set: function(s) {
-            get_stroke_at = s;
+        set: function(c) {
+           get_stroke_at = Rasterizer.getRGBAFrom(c);
         }
     });
     def(self, 'fillStyle', {
         get: function() {
-            return;
+            return '';
         },
-        set: function(s) {
-            get_fill_at = s;
+        set: function(c) {
+           get_fill_at = Rasterizer.getRGBAFrom(c);
         }
     });
     def(self, 'lineWidth', {
@@ -362,7 +190,11 @@ function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth,
             return lineWidth;
         },
         set: function(lw) {
-            lineWidth = lw;
+            lw = +lw;
+            if ((0 <= lw) && isFinite(lw))
+            {
+                lineWidth = lw;
+            }
         }
     });
     def(self, 'lineCap', {
@@ -370,7 +202,16 @@ function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth,
             return lineCap;
         },
         set: function(lc) {
-            lineCap = lc;
+            lc = String(lc).toLowerCase();
+            if (-1 !== ['butt','square'].indexOf(lc))
+            {
+                // only 'butt' and 'square' lineCap supported
+                lineCap = lc;
+            }
+            else
+            {
+                err('"'+lc+'" lineCap is not supported!');
+            }
         }
     });
     def(self, 'lineJoin', {
@@ -378,7 +219,16 @@ function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth,
             return lineJoin;
         },
         set: function(lj) {
-            lineJoin = lj;
+            lj = String(lj).toLowerCase();
+            if (-1 !== ['miter','bevel'].indexOf(lj))
+            {
+                // only 'miter' and 'bevel' lineJoin supported
+                lineJoin = lj;
+            }
+            else
+            {
+                err('"'+lj+'" lineJoin is not supported!');
+            }
         }
     });
     def(self, 'miterLimit', {
@@ -386,23 +236,11 @@ function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth,
             return miterLimit;
         },
         set: function(ml) {
-            miterLimit = ml;
-        }
-    });
-    def(self, 'globalAlpha', {
-        get: function() {
-            return alpha;
-        },
-        set: function(a) {
-            alpha = a;
-        }
-    });
-    def(self, 'lineDash', {
-        get: function() {
-            return lineDash;
-        },
-        set: function(ld) {
-            lineDash = ld;
+            ml = +ml;
+            if ((0 <= ml) && isFinite(ml))
+            {
+                miterLimit = ml;
+            }
         }
     });
     def(self, 'lineDashOffset', {
@@ -410,206 +248,569 @@ function Path(width, height, set_rgba_at, get_stroke_at, get_fill_at, lineWidth,
             return lineDashOffset;
         },
         set: function(ldo) {
-            lineDashOffset = ldo;
+            ldo = +ldo;
+            if ((0 <= ldo) && isFinite(ldo))
+            {
+                lineDashOffset = ldo;
+            }
         }
     });
-    self.moveTo = function(x, y) {
-        d.push([x, y]);
-        return self;
+    def(self, 'lineDash', {
+        get: function() {
+            return lineDash.slice();
+        },
+        set: function(ld) {
+            ld = [].concat(ld);
+            if (ld.length & 1) ld = ld.concat(ld);
+            lineDash = ld;
+        }
+    });
+    self.getLineDash = function() {
+        return self.lineDash;
     };
-    self.lineTo = function(x, y) {
-        d[d.length-1].push(x, y);
-        return self;
+    self.setLineDash = function(ld) {
+        self.lineDash = ld;
     };
-    self.rect = function(x, y, w, h) {
-        if (0 < w && 0 < h)
-        {
-            var p = [
-                x, y,
-                x + w - 1, y,
-                x + w - 1, y + h - 1,
-                x, y + h - 1,
-                x, y
-            ];
-            p.lineCap = 'butt';
-            p.lineJoin = 'miter';
-            if (2 >= d[d.length-1].length)
+    def(self, 'globalAlpha', {
+        get: function() {
+            return alpha;
+        },
+        set: function(a) {
+            a = +a;
+            if (0 <= a && a <= 1)
             {
-                d[d.length-1] = p;
-            }
-            else
-            {
-                d.push(p);
+                alpha = a;
             }
         }
-        return self;
-    };
-    self.arc = function(cx, cy, r, start, end, ccw) {
-        var p = arc_points(cx, cy, r, r, 0, start, end, ccw);
-        p.lineCap = 'butt';
-        p.lineJoin = 'bevel';
-        if (2 >= d[d.length-1].length)
-        {
-            d[d.length-1] = p;
+    });
+    def(self, 'globalCompositeOperation', {
+        get: function() {
+            return op;
+        },
+        set: function(o) {
+            op = String(o);
         }
-        else
-        {
-            d.push(p);
-        }
-        return self;
+    });
+
+    self.scale = function(sx, sy) {
+        currentPath._t = transform = Matrix2D.scale(sx, sy).mul(transform);
     };
-    self.ellipse = function(cx, cy, rx, ry, angle, start, end, fs) {
-        var p = arc_points(cx, cy, rx, ry, angle, start, end, fs);
-        p.lineCap = 'butt';
-        p.lineJoin = 'bevel';
-        if (2 >= d[d.length-1].length)
-        {
-            d[d.length-1] = p;
-        }
-        else
-        {
-            d.push(p);
-        }
-        return self;
+    self.rotate = function(angle) {
+        currentPath._t = transform = Matrix2D.rotate(angle || 0).mul(transform);
     };
-    self.quadraticCurveTo = function(x1, y1, x2, y2) {
-        var y0 = d[d.length-1].pop(),
-            x0 = d[d.length-1].pop(),
-            p = bezier_points([x0, y0, x1, y1, x2, y2]);
-        d[d.length-1].push.apply(d[d.length-1], p);
-        return self;
+    self.translate = function(tx, ty) {
+        currentPath._t = transform = Matrix2D.translate(tx || 0, ty || 0).mul(transform);
     };
-    self.bezierCurveTo = function(x1, y1, x2, y2, x3, y3) {
-        var y0 = d[d.length-1].pop(),
-            x0 = d[d.length-1].pop(),
-            p = bezier_points([x0, y0, x1, y1, x2, y2, x3, y3]);
-        d[d.length-1].push.apply(d[d.length-1], p);
-        return self;
+    self.transform = function(a, b, c, d, e, f) {
+        currentPath._t = transform = (new Matrix2D(a, c, e, b, d, f)).mul(transform);
+    };
+    self.getTransform = function() {
+        return transform.clone();
+    };
+    self.setTransform = function(a, b, c, d, e, f) {
+        if (1 < arguments.length)
+        {
+            transform = new Matrix2D(a, c, e, b, d, f);
+        }
+        else if ((null != a.m00) && a.clone)
+        {
+            transform = a.clone();
+        }
+        currentPath._t = transform;
+    };
+    self.resetTransform = function() {
+        currentPath._t = transform = Matrix2D.EYE();
+    };
+
+    self.beginPath = function() {
+        currentPath = new Path2D(transform);
     };
     self.closePath = function() {
-        if (2 < d[d.length-1].length)
-        {
-            var x0 = d[d.length-1][0],
-                y0 = d[d.length-1][1],
-                x1 = d[d.length-1][d[d.length-1].length-2],
-                y1 = d[d.length-1][d[d.length-1].length-1]
-            ;
-            if (!(is_almost_equal(x0, x1, 1e-6) && is_almost_equal(y0, y1, 1e-6)))
-            {
-                d[d.length-1].push(x0, y0);
-            }
-            d.push([0, 0]);
-        }
-        return self;
+        currentPath.closePath();
     };
-    self.stroke = function() {
+    self.moveTo = function(x, y) {
+        currentPath.moveTo(x, y);
+    };
+    self.lineTo = function(x, y) {
+        currentPath.lineTo(x, y);
+    };
+    self.rect = function(x, y, w, h) {
+        currentPath.rect(x, y, w, h);
+    };
+    self.roundRect = function(x, y, w, h) {
+        currentPath.roundRect.apply(currentPath, arguments);
+    };
+    self.arc = function(cx, cy, r, start, end, ccw) {
+        currentPath.arc(cx, cy, r, start, end, ccw);
+    };
+    self.ellipse = function(cx, cy, rx, ry, angle, start, end, fs) {
+        currentPath.ellipse(cx, cy, rx, ry, angle, start, end, fs);
+    };
+    self.arcTo = function(x1, y1, x2, y2, r) {
+        currentPath.arcTo(x1, y1, x2, y2, r);
+    };
+    self.quadraticCurveTo = function(x1, y1, x2, y2) {
+        currentPath.quadraticCurveTo(x1, y1, x2, y2);
+    };
+    self.bezierCurveTo = function(x1, y1, x2, y2, x3, y3) {
+        currentPath.bezierCurveTo(x1, y1, x2, y2, x3, y3);
+    };
+    self.strokeRect = function(x, y, w, h) {
+        if (0 < lineWidth) self.stroke((new Path2D(transform)).rect(x, y, w, h));
+    };
+    self.fillRect = function(x, y, w, h) {
+        self.fill((new Path2D(transform)).rect(x, y, w, h), 'evenodd');
+    };
+    self.stroke = function(path) {
         if (0 < lineWidth)
         {
-            var m = mult, xmin = 0, ymin = 0, xmax = width - 1, ymax = height - 1;
+            var m = mult;
             if (1 > lineWidth) mult = lineWidth;
             canvas_reset();
-            for (var i=0,n=d.length,p; i<n; ++i)
-            {
-                p = d[i];
-                if (p && (2 < p.length))
-                {
-                    stroke_polyline(set_pixel, p, lineWidth, lineDash, lineDashOffset, p.lineCap || lineCap, p.lineJoin || lineJoin, miterLimit, xmin, ymin, xmax, ymax);
-                }
-            }
+            stroke_path(set_pixel, path || currentPath, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, 0, 0, width - 1, height - 1);
             canvas_output(stroke_pixel);
             mult = m;
         }
-        return self;
     };
-    self.fill = function(fillRule) {
+    self.fill = function(path, fillRule) {
+        if (!arguments.length || (null == path && null == fillRule))
+        {
+            path = currentPath;
+            fillRule = 'nonzero';
+        }
+        else if (1 === arguments.length || null == fillRule)
+        {
+            if (path instanceof Path2D)
+            {
+                fillRule = 'nonzero';
+            }
+            else
+            {
+                fillRule = path;
+                path = currentPath;
+            }
+        }
+        fillRule = String(fillRule || 'nonzero').toLowerCase();
+        if ('evenodd' !== fillRule) fillRule = 'nonzero';
+        path = path || currentPath;
         var m = mult, lw = 0.65,
             xmin = 0, ymin = 0,
             xmax = width - 1, ymax = height - 1;
         canvas_reset();
         // stroke a thin path outline
         if (1 > lw) mult = lw;
-        for (var i=0,n=d.length,p; i<n; ++i)
-        {
-            p = d[i];
-            if (p && (2 < p.length))
-            {
-                stroke_polyline(set_pixel, p, lw, [], 0, 'butt', 'bevel', 0, xmin, ymin, xmax, ymax);
-            }
-        }
+        stroke_path(set_pixel, path, lw, [], 0, 'butt', 'bevel', 0, xmin, ymin, xmax, ymax);
         mult = m;
         // fill path interior
-        fill_path(set_pixel, fillRule, d, xmin, ymin, xmax, ymax);
+        fill_path(set_pixel, path, fillRule, xmin, ymin, xmax, ymax);
         canvas_output(fill_pixel);
-        return self;
     };
-    self.isPointInStroke = function(x, y) {
-        return point_in_stroke(x, y, d);
-    };
-    self.isPointInPath = function(x, y, fillRule) {
-        return point_in_path(x, y, d, fillRule);
-    };
-    self.strokeRect = function(x, y, w, h) {
-        if (1 <= w && 1 <= h && 0 < lineWidth)
+    self.isPointInStroke = function(path, x, y) {
+        if (3 > arguments.length)
         {
-            var m = mult;
-            if (1 > lineWidth) mult = lineWidth;
-            canvas_reset();
-            stroke_polyline(set_pixel, [
-            x, y,
-            x + w - 1, y,
-            x + w - 1, y + h - 1,
-            x, y + h - 1,
-            x, y
-            ], lineWidth, lineDash, lineDashOffset, 'butt', 'miter', miterLimit, 0, 0, width - 1, height - 1);
-            canvas_output(stroke_pixel);
-            mult = m;
+            y = x;
+            x = path;
+            path = currentPath;
         }
-        return self;
+        return point_in_stroke(x || 0, y || 0, path || currentPath);
     };
-    self.fillRect = function(x, y, w, h) {
-        if (1 <= w && 1 <= h)
+    self.isPointInPath = function(path, x, y, fillRule) {
+        if (!(path instanceof Path2D))
         {
-            canvas_reset();
-            fill_rect(set_pixel, stdMath.round(x), stdMath.round(y), stdMath.round(x + w - 1), stdMath.round(y + h - 1), 0, 0, width - 1, height - 1);
-            canvas_output(fill_pixel);
+            y = x;
+            x = path;
+            path = currentPath;
         }
-        return self;
-    };
-    self.dispose = function() {
-        d = null;
+        fillRule = String(fillRule || 'nonzero').toLowerCase();
+        if ('evenodd' !== fillRule) fillRule = 'nonzero';
+        return point_in_path(x || 0, y || 0, path || currentPath, fillRule);
     };
 }
-Path.prototype = {
-    constructor: Path,
-    dispose: null,
+RenderingContext2D[PROTO] = {
+    constructor: RenderingContext2D,
     strokeStyle: null,
     fillStyle: null,
     lineWidth: null,
     lineCap: null,
     lineJoin: null,
     miterLimit: null,
-    globalAlpha: null,
     lineDash: null,
     lineDashOffset: null,
+    getLineDash: null,
+    setLineDash: null,
+    globalAlpha: null,
+    globalCompositeOperation: null,
+    scale: null,
+    rotate: null,
+    translate: null,
+    transform: null,
+    getTransform: null,
+    setTransform: null,
+    resetTransform: null,
+    beginPath: null,
+    closePath: null,
     moveTo: null,
     lineTo: null,
     rect: null,
     arc: null,
     ellipse: null,
+    arcTo: null,
     quadraticCurveTo: null,
     bezierCurveTo: null,
-    closePath: null,
-    isPointInStroke: null,
-    isPointInPath: null,
+    strokeRect: null,
+    fillRect: null,
     stroke: null,
     fill: null,
-    strokeRect: null,
-    fillRect: null
+    isPointInStroke: null,
+    isPointInPath: null,
+    createImageData: function(width, height) {
+        return Rasterizer.createImageData(width, height);
+    },
+    strokeText: function() {
+        err('Not Implemented!');
+    },
+    fillText: function() {
+        err('Not Implemented!');
+    },
+    measureText: function() {
+        err('Not Implemented!');
+    }
 };
-Rasterizer.Path = Path;
+Rasterizer.RenderingContext2D = RenderingContext2D;
 
-// Homogeneous Transformation Matrix
-/*function Matrix(m00, m01, m02, m10, m11, m12)
+function Path2D(transform)
+{
+    transform = transform || Matrix2D.EYE();
+    var self = this, need_new_subpath = true, d = [], sd = null;
+
+    def(self, '_t', {
+        get: function() {
+            return transform.clone();
+        },
+        set: function(_t) {
+            transform = _t;
+        }
+    });
+    def(self, '_d', {
+        get: function() {
+            return d;
+        },
+        set: function(_d) {
+        }
+    });
+    def(self, '_sd', {
+        get: function() {
+            if (!sd) sd = path_to_segments(d).sort(asc);
+            return sd;
+        },
+        set: function(_sd) {
+        }
+    });
+    self.moveTo = function(x, y) {
+        var xy = handle([x, y], transform);
+        if (!xy) return self;
+        d.push(xy);
+        need_new_subpath = false;
+        return self;
+    };
+    self.closePath = function() {
+        if (d.length && 2 < d[d.length-1].length)
+        {
+            var x0 = +d[d.length-1][0],
+                y0 = d[d.length-1][1],
+                x1 = +d[d.length-1][d[d.length-1].length-2],
+                y1 = d[d.length-1][d[d.length-1].length-1]
+            ;
+            if (!(is_almost_equal(x0, x1, 1e-6) && is_almost_equal(y0, y1, 1e-6)))
+            {
+                d[d.length-1].push(x0, y0);
+                d.push([x0, y0]);
+                need_new_subpath = false;
+                sd = null;
+            }
+        }
+        return self;
+    };
+    self.lineTo = function(x, y) {
+        var xy = handle([x, y], transform);
+        if (!xy) return self;
+        if (need_new_subpath)
+        {
+            d.push(xy);
+            need_new_subpath = false;
+        }
+        else
+        {
+            d[d.length-1].push(xy[0], xy[1]);
+            sd = null;
+        }
+        return self;
+    };
+    self.rect = function(x, y, w, h) {
+        var p = handle([
+            x, y,
+            x + w, y,
+            x + w, y + h,
+            x, y + h
+        ], transform);
+        if (!p) return self;
+        p.push(p[0], p[1]);
+        if (d.length && 2 >= d[d.length-1].length)
+        {
+            d[d.length-1] = p;
+        }
+        else
+        {
+            d.push(p);
+        }
+        d.push([p[0], p[1]]);
+        p[0] = new N(+p[0], {lineCap:'butt', lineJoin:'miter'});
+        sd = null;
+        need_new_subpath = false;
+        return self;
+    };
+    self.roundRect = function(x, y, w, h/*,..*/) {
+        var p = handle([
+            x, y, w, h
+        ]);
+        if (!p) return self;
+        var radii = (arguments[4] && arguments[4].push ? arguments[4] : [].slice.call(arguments, 4)).filter(function(r) {return 0 < r;});
+        if (1 > radii.length || 4 < radii.length) err('Invalid radii in roundRect');
+        var upperLeft, upperRight, lowerRight, lowerLeft, ccw = false, t;
+        if (4 === radii.length)
+        {
+            upperLeft = radii[0];
+            upperRight = radii[1];
+            lowerRight = radii[2];
+            lowerLeft = radii[3];
+        }
+        else if (3 === radii.length)
+        {
+            upperLeft = radii[0];
+            upperRight = radii[1];
+            lowerLeft = radii[1];
+            lowerRight = radii[2];
+        }
+        else if (2 === radii.length)
+        {
+            upperLeft = radii[0];
+            lowerRight = radii[0];
+            upperRight = radii[1];
+            lowerLeft = radii[1];
+        }
+        else
+        {
+            upperLeft = radii[0];
+            upperRight = radii[0];
+            lowerRight = radii[0];
+            lowerLeft = radii[0];
+        }
+        if (0 > w)
+        {
+            ccw = true;
+            x += w;
+            w = -w;
+            t = upperLeft;
+            upperLeft = upperRight;
+            upperRight = t;
+            t = lowerLeft;
+            lowerLeft = lowerRight;
+            lowerRight = t;
+        }
+        if (0 > h)
+        {
+            ccw = !ccw;
+            y += h;
+            h = -h;
+            t = upperLeft;
+            upperLeft = lowerLeft;
+            lowerLeft = t;
+            t = upperRight;
+            upperRight = lowerRight;
+            lowerRight = t;
+        }
+        var top = upperLeft + upperRight,
+            right = upperRight + lowerRight,
+            bottom = lowerRight + lowerLeft,
+            left = upperLeft + lowerLeft,
+            scale = stdMath.min(w/top, h/right, w/bottom, h/left);
+        if (scale < 1)
+        {
+            upperLeft *= scale;
+            upperRight *= scale;
+            lowerLeft *= scale;
+            lowerRight *= scale;
+        }
+        var p = [
+        x + upperLeft, y
+        ];
+        if (ccw)
+        {
+            p.push.apply(p, arc_points(x + upperLeft, y + upperLeft, upperLeft, upperLeft, 0, PI, 3*HALF_PI, ccw));
+            p.push(x, y + upperLeft);
+            p.push.apply(p, arc_points(x + lowerLeft, y + h - lowerLeft, lowerLeft, lowerLeft, 0, HALF_PI, PI, ccw));
+            p.push(x + lowerLeft, y + h);
+            p.push.apply(p, arc_points(x + w - lowerRight, y + h - lowerRight, lowerRight, lowerRight, 0, 0, HALF_PI, ccw));
+            p.push(x + w, y + h - lowerRight);
+            p.push.apply(p, arc_points(x + w - upperRight, y + upperRight, upperRight, upperRight, 0, 3*HALF_PI, TWO_PI, ccw));
+            p.push(x + w - upperRight, y);
+        }
+        else
+        {
+            p.push(x + w - upperRight, y);
+            p.push.apply(p, arc_points(x + w - upperRight, y + upperRight, upperRight, upperRight, 0, 3*HALF_PI, TWO_PI, ccw));
+            p.push(x + w, y + h - lowerRight);
+            p.push.apply(p, arc_points(x + w - lowerRight, y + h - lowerRight, lowerRight, lowerRight, 0, 0, HALF_PI, ccw));
+            p.push(x + lowerLeft, y + h);
+            p.push.apply(p, arc_points(x + lowerLeft, y + h - lowerLeft, lowerLeft, lowerLeft, 0, HALF_PI, PI, ccw));
+            p.push(x, y + upperLeft);
+            p.push.apply(p, arc_points(x + upperLeft, y + upperLeft, upperLeft, upperLeft, 0, PI, 3*HALF_PI, ccw));
+        }
+        p.push(x + upperLeft, y);
+        p[0] = new N(+p[0], {lineCap:'butt', lineJoin:'bevel'});
+        d.push(p);
+        d.push([x, y]);
+        sd = null;
+        need_new_subpath = false;
+        return self;
+    };
+    self.arc = function(cx, cy, r, start, end, ccw) {
+        if (0 > r) err('Negative radius in arc');
+        var p = arc_points(cx, cy, r, r, 0, start, end, ccw);
+        p[0] = new N(+p[0], {type:'arc', lineCap:true, lineJoin:'bevel'});
+        p[p.length-2] = new N(+p[p.length-2], {type:'arc', lineCap:true, lineJoin:true});
+        if (need_new_subpath)
+        {
+            d.push(p);
+            need_new_subpath = false;
+        }
+        else
+        {
+            d[d.length-1].push.apply(d[d.length-1], p);
+        }
+        sd = null;
+        return self;
+    };
+    self.ellipse = function(cx, cy, rx, ry, angle, start, end, ccw) {
+        if (0 > rx || 0 > ry) err('Negative radius in ellipse');
+        var p = arc_points(cx, cy, rx, ry, angle, start, end, ccw);
+        p[0] = new N(+p[0], {type:'arc', lineCap:true, lineJoin:'bevel'});
+        p[p.length-2] = new N(+p[p.length-2], {type:'arc', lineCap:true, lineJoin:true});
+        if (need_new_subpath)
+        {
+            d.push(p);
+            need_new_subpath = false;
+        }
+        else
+        {
+            d[d.length-1].push.apply(d[d.length-1], p);
+        }
+        sd = null;
+        return self;
+    };
+    self.arcTo = function(x1, y1, x2, y2, r) {
+        var p = handle([
+            x1, y1,
+            x2, y2
+        ], transform);
+        if (!p) return self;
+        if (0 > r) err('Negative radius in arcTo');
+        if (need_new_subpath)
+        {
+            d.push([p[0], p[1]]);
+            need_new_subpath = false;
+        }
+        var params = arc2arc(
+            +d[d.length-1][d[d.length-1].length-2],
+            d[d.length-1][d[d.length-1].length-1],
+            p[0], p[1],
+            p[2], p[3],
+            r
+        );
+        d[d.length-1].push(params[0], params[1]);
+        if (2 < params.length)
+        {
+            p = arc_points(params[2], params[3], r, r, 0, params[4], params[5], params[6]);
+            p[0] = new N(+p[0], {type:'arc', lineCap:true, lineJoin:'bevel'});
+            p[p.length-2] = new N(+p[p.length-2], {type:'arc', lineCap:true, lineJoin:true});
+            d[d.length-1].push.apply(d[d.length-1], p);
+        }
+        return self;
+    };
+    self.quadraticCurveTo = function(x1, y1, x2, y2) {
+        var p = handle([
+            x1, y1,
+            x2, y2
+        ], transform);
+        if (!p) return self;
+        if (need_new_subpath)
+        {
+            d.push([p[0], p[1]]);
+            need_new_subpath = false;
+        }
+        var y0 = d[d.length-1].pop(),
+            x0 = +d[d.length-1].pop();
+        p = bezier_points([x0, y0, p[0], p[1], p[2], p[3]]);
+        p[0] = new N(+p[0], {type:'bezier', lineCap:true, lineJoin:'bevel'});
+        p[p.length-2] = new N(+p[p.length-2], {type:'bezier', lineCap:true, lineJoin:true});
+        d[d.length-1].push.apply(d[d.length-1], p);
+        sd = null;
+        return self;
+    };
+    self.bezierCurveTo = function(x1, y1, x2, y2, x3, y3) {
+        var p = handle([
+            x1, y1,
+            x2, y2,
+            x3, y3
+        ], transform);
+        if (!p) return self;
+        if (need_new_subpath)
+        {
+            d.push([p[0], p[1]]);
+            need_new_subpath = false;
+        }
+        var y0 = d[d.length-1].pop(),
+            x0 = +d[d.length-1].pop();
+        p = bezier_points([x0, y0, p[0], p[1], p[2], p[3], p[4], p[5]]);
+        p[0] = new N(+p[0], {type:'bezier', lineCap:true, lineJoin:'bevel'});
+        p[p.length-2] = new N(+p[p.length-2], {type:'bezier', lineCap:true, lineJoin:true});
+        d[d.length-1].push.apply(d[d.length-1], p);
+        sd = null;
+        return self;
+    };
+    self.addPath = function(path/*, transform*/) {
+        if (path instanceof Path2D)
+        {
+            d.push.apply(d, path._d);
+            sd = null;
+        }
+        return self;
+    };
+    self.dispose = function() {
+        d = null;
+        sd = null;
+    };
+}
+Path2D[PROTO] = {
+    constructor: Path2D,
+    _d: null,
+    _sd: null,
+    dispose: null,
+    addPath: null,
+    moveTo: null,
+    lineTo: null,
+    rect: null,
+    roundRect: null,
+    arc: null,
+    ellipse: null,
+    arcTo: null,
+    quadraticCurveTo: null,
+    bezierCurveTo: null,
+    closePath: null
+};
+RenderingContext2D.Path2D = Path2D;
+
+function Matrix2D(m00, m01, m02, m10, m11, m12)
 {
     var self = this;
     if (arguments.length)
@@ -622,8 +823,8 @@ Rasterizer.Path = Path;
         self.m12 = m12;
     }
 }
-Matrix.prototype = {
-    constructor: Matrix,
+Matrix2D[PROTO] = {
+    constructor: Matrix2D,
     m00: 1,
     m01: 0,
     m02: 0,
@@ -632,16 +833,16 @@ Matrix.prototype = {
     m12: 0,
     clone: function() {
         var self = this;
-        return new Matrix(
+        return new Matrix2D(
         self.m00, self.m01, self.m02,
         self.m10, self.m11, self.m12
         );
     },
     mul: function(other) {
         var self = this;
-        if (other instanceof Matrix)
+        if (other instanceof Matrix2D)
         {
-            return new Matrix(
+            return new Matrix2D(
             self.m00*other.m00 + self.m01*other.m10,
             self.m00*other.m01 + self.m01*other.m11,
             self.m00*other.m02 + self.m01*other.m12 + self.m02,
@@ -661,7 +862,7 @@ Matrix.prototype = {
         if (is_strictly_equal(det2, 0)) return null;
         i00 = a11/det2; i01 = -a01/det2;
         i10 = -a10/det2; i11 = a00/det2;
-        return new Matrix(
+        return new Matrix2D(
         i00, i01, -i00*a02 - i01*a12,
         i10, i11, -i10*a02 - i11*a12
         );
@@ -669,52 +870,84 @@ Matrix.prototype = {
     transform: function(x, y) {
         if (1 === arguments.length)
         {
-            y = x.y;
-            x = x.x;
+            y = x[1];
+            x = x[0];
         }
         var self = this;
-        return {
-            x: self.m00*x + self.m01*y + self.m02,
-            y: self.m10*x + self.m11*y + self.m12
-        };
+        return [
+            self.m00*x + self.m01*y + self.m02,
+            self.m10*x + self.m11*y + self.m12
+        ];
     }
 };
-Matrix.translate = function(tx, ty) {
-    return new Matrix(
+Matrix2D.translate = function(tx, ty) {
+    return new Matrix2D(
     1, 0, tx || 0,
     0, 1, ty || 0
     );
 };
-Matrix.scale = function(sx, sy, ox, oy) {
+Matrix2D.scale = function(sx, sy, ox, oy) {
     ox = ox || 0;
     oy = oy || 0;
-    return new Matrix(
+    return new Matrix2D(
     sx, 0,  -sx*ox + ox,
     0,  sy, -sy*oy + oy
     );
 };
-Matrix.rotate = function(theta, ox, oy) {
+Matrix2D.rotate = function(theta, ox, oy) {
     ox = ox || 0;
     oy = oy || 0;
     var cos = stdMath.cos(theta || 0), sin = stdMath.sin(theta || 0);
-    return new Matrix(
+    return new Matrix2D(
     cos, -sin, ox - cos*ox + sin*oy,
     sin,  cos, oy - cos*oy - sin*ox
     );
 };
-Matrix.EYE = function() {
-    return new Matrix(
+Matrix2D.EYE = function() {
+    return new Matrix2D(
     1, 0, 0,
     0, 1, 0
     );
 };
-Rasterizer.Matrix = Matrix;*/
+RenderingContext2D.Matrix2D = Matrix2D;
 
+function N(x, params)
+{
+    this.v = x;
+    this.params = params || null;
+}
+N[PROTO] = {
+    constructor: N,
+    v: 0,
+    params: null,
+    valueOf: function() {
+        return this.v;
+    }
+};
+
+function handle(coords, transform)
+{
+    for (var i=0,n=coords.length; i<n; ++i)
+    {
+        if (isNaN(coords[i]) || !isFinite(coords[i]))
+            return null;
+    }
+    if (transform)
+    {
+        for (i=0; i<n; i+=2)
+        {
+            var xy = transform.transform(coords[i], coords[i+1]);
+            coords[i] = xy[0];
+            coords[i+1] = xy[1];
+        }
+    }
+    return coords;
+}
 function stroke_polyline(set_pixel, points, lw, ld, ldo, lc, lj, ml, xmin, ymin, xmax, ymax)
 {
     var n = points.length, i,
         x1, y1, x2, y2, xp, yp,
-        dx1, dy1, dx2, dy2, w1, w2, mlw;
+        dx1, dy1, dx2, dy2, w1, w2, mlw, ljj = lj, lcc = lc;
     if (n < 6)
     {
         x1 = points[0];
@@ -739,10 +972,12 @@ function stroke_polyline(set_pixel, points, lw, ld, ldo, lc, lj, ml, xmin, ymin,
             dx2 = stdMath.abs(x2 - x1);
             dy2 = stdMath.abs(y2 - y1);
             w2 = ww(lw, dx2, dy2);
-            stroke_line(set_pixel, x1, y1, x2, y2, dx2, dy2, w2[0], w2[1], 0 === i ? lc : null, n === i+2 ? lc : null, xmin, ymin, xmax, ymax);
+            if (x1.params && x1.params.lineCap) lcc = true === x1.params.lineCap ? lc : x1.params.lineCap;
+            stroke_line(set_pixel, x1, y1, x2, y2, dx2, dy2, w2[0], w2[1], 0 === i ? lcc : null, n === i+2 ? lcc : null, xmin, ymin, xmax, ymax);
             if (1 < lw && 0 < i)
             {
-                join_lines(set_pixel, xp, yp, x1, y1, x2, y2, dx1, dy1, w1[0], w1[1], dx2, dy2, w2[0], w2[1], lj, mlw, xmin, ymin, xmax, ymax);
+                if (x1.params && x1.params.lineJoin) ljj = true === x1.params.lineJoin ? lj : x1.params.lineJoin;
+                join_lines(set_pixel, xp, yp, x1, y1, x2, y2, dx1, dy1, w1[0], w1[1], dx2, dy2, w2[0], w2[1], ljj, mlw, xmin, ymin, xmax, ymax);
             }
             xp = x1;
             yp = y1;
@@ -1308,12 +1543,99 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
         }
     }
 }
-function arc_points(cx, cy, rx, ry, a, ts, te, fs)
+function arc2arc(x0, y0, x1, y1, x2, y2, r)
 {
-    if (fs) te = - te - PI;
-    var cos = stdMath.cos(a),
-        sin = stdMath.sin(a),
-        delta = te - ts,
+    // adapted from node-canvas
+    if (
+        (is_almost_equal(x1, x0) && is_almost_equal(y1, y0))
+        || (is_almost_equal(x1, x2) && is_almost_equal(y1, y2))
+        || is_almost_equal(r, 0)
+    )
+    {
+        return [x1, y1];
+    }
+
+    var p1p0, p1p2,
+        p1p0_length, p1p2_length,
+        cos_phi, factor_max, tangent,
+        factor_p1p0, t_p1p0,
+        factor_p1p2, t_p1p2,
+        orth_p1p0, orth_p1p0_length,
+        orth_p1p2, orth_p1p2_length,
+        factor_ra, cos_alpha,
+        center, sa, ea, ccw = false
+    ;
+
+    p1p0 = {x:x0 - x1, y:y0 - y1};
+    p1p2 = {x:x2 - x1, y:y2 - y1};
+    p1p0_length = hypot(p1p0.x, p1p0.y);
+    p1p2_length = hypot(p1p2.x, p1p2.y);
+    cos_phi = (p1p0.x * p1p2.x + p1p0.y * p1p2.y) / (p1p0_length * p1p2_length);
+
+    // all points on a line
+    if (is_strictly_equal(cos_phi, -1))
+    {
+        return [x1, y1];
+    }
+
+    if (is_strictly_equal(cos_phi, 1))
+    {
+        // infinite far away point
+        factor_max = 65535 / p1p0_length;
+        return [x0 + factor_max * p1p0.x, y0 + factor_max * p1p0.y];
+    }
+
+    tangent = r / stdMath.tan(stdMath.acos(cos_phi) / 2);
+    factor_p1p0 = tangent / p1p0_length;
+    t_p1p0 = {x:x1 + factor_p1p0 * p1p0.x, y:y1 + factor_p1p0 * p1p0.y};
+
+    orth_p1p0 = {x:p1p0.y, y:-p1p0.x};
+    orth_p1p0_length = hypot(orth_p1p0.x, orth_p1p0.y);
+    factor_ra = r / orth_p1p0_length;
+
+    cos_alpha = (orth_p1p0.x * p1p2.x + orth_p1p0.y * p1p2.y) / (orth_p1p0_length * p1p2_length);
+    if (cos_alpha < 0)
+    {
+        orth_p1p0 = {x:-orth_p1p0.x, y:-orth_p1p0.y};
+    }
+
+    center = {x:t_p1p0.x + factor_ra * orth_p1p0.x, y:t_p1p0.y + factor_ra * orth_p1p0.y};
+
+    orth_p1p0 = {x:-orth_p1p0.x, y:-orth_p1p0.y};
+    sa = stdMath.acos(orth_p1p0.x / orth_p1p0_length);
+    if (orth_p1p0.y < 0) sa = TWO_PI - sa;
+
+    factor_p1p2 = tangent / p1p2_length;
+    t_p1p2 = {x:x1 + factor_p1p2 * p1p2.x, y:y1 + factor_p1p2 * p1p2.y};
+    orth_p1p2 = {x:t_p1p2.x - center.x, y:t_p1p2.y - center.y};
+    orth_p1p2_length = hypot(orth_p1p2.x, orth_p1p2.y);
+    ea = stdMath.acos(orth_p1p2.x / orth_p1p2_length);
+
+    if (orth_p1p2.y < 0) ea = TWO_PI - ea;
+    if ((sa > ea) && ((sa - ea) < PI)) ccw = true;
+    if ((sa < ea) && ((ea - sa) > PI)) ccw = true;
+
+    return [
+     t_p1p0.x
+    ,t_p1p0.y
+    ,center.x
+    ,center.y
+    ,sa
+    ,ea
+    ,ccw && !is_almost_equal(TWO_PI, r) ? true : false
+    ];
+}
+function arc_points(cx, cy, rx, ry, a, ts, te, ccw)
+{
+    var delta = te - ts;
+    if (ccw)
+    {
+        delta = cmod(delta) - TWO_PI;
+        ts = cmod(ts);
+        te = ts + delta;
+    }
+    var cos = a ? stdMath.cos(a) : 1,
+        sin = a ? stdMath.sin(a) : 0,
         arc = function(t) {
             var p = ts + t*delta,
                 x = rx*stdMath.cos(p),
@@ -1325,7 +1647,8 @@ function arc_points(cx, cy, rx, ry, a, ts, te, fs)
         },
         points = sample_curve(arc);
 
-    if (stdMath.abs(delta)+1e-4 >= TWO_PI && !is_almost_equal(points[0], points[points.length-2], 1e-4) && !is_almost_equal(points[1], points[points.length-1], 1e-4)) points.push(points[0], points[1]);
+    // normally must call .closePath even if the whole TWO_PI arc is drawn
+    if (stdMath.abs(delta)+1e-3 >= TWO_PI && (!is_almost_equal(points[0], points[points.length-2], 1e-3) || !is_almost_equal(points[1], points[points.length-1], 1e-3))) points.push(points[0], points[1]);
     return points;
 }
 function bezier_points(c)
@@ -1349,14 +1672,24 @@ function bezier_points(c)
         };
     return sample_curve(6 < c.length ? cubic : quadratic);
 }
-function fill_path(set_pixel, rule, path, xmin, ymin, xmax, ymax)
+function stroke_path(set_pixel, path, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, xmin, ymin, xmax, ymax)
 {
-    var edges = path_to_segments(path),
-        y = edges.ymin, yM = edges.ymax;
+    for (var i=0,d=path._d,n=d.length,p; i<n; ++i)
+    {
+        p = d[i];
+        if (p && (2 < p.length))
+        {
+            stroke_polyline(set_pixel, p, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, xmin, ymin, xmax, ymax);
+        }
+    }
+}
+function fill_path(set_pixel, path, rule, xmin, ymin, xmax, ymax)
+{
+    var edges = path._sd;
     if (!edges.length) return;
-    edges.sort(asc);
     var n = edges.length,
         edg = new Array(n),
+        y = edges.ymin, yM = edges.ymax,
         i = 0, j, k, d, e, c,
         y1, y2, x, xm, xM, x1, x2, xi,
         insidel, insider,
@@ -1390,8 +1723,8 @@ function fill_path(set_pixel, rule, path, xmin, ymin, xmax, ymax)
             xM = xi;
         }
         // store intersection point to be used later
-        e[6] = xi;
-        e[7] = 0;
+        e[7] = xi;
+        e[8] = 0;
         edg[0] = e;
         k = 1;
         // get rest edges that intersect at this y
@@ -1417,13 +1750,13 @@ function fill_path(set_pixel, rule, path, xmin, ymin, xmax, ymax)
                     xM = stdMath.max(xM, xi);
                 }
                 // store intersection point to be used later
-                e[6] = xi;
-                e[7] = 0;
+                e[7] = xi;
+                e[8] = 0;
                 edg[k++] = e;
             }
         }
         // some edges found are redundant, mark them
-        c = redundant(edg, k);
+        c = redundant(edg, k, y);
         if (c+2 > k) continue; // at least two edges are needed
         xm = stdMath.max(xmin, stdMath.round(xm + 0.5));
         xM = stdMath.min(xmax, stdMath.round(xM - 0.5));
@@ -1436,8 +1769,8 @@ function fill_path(set_pixel, rule, path, xmin, ymin, xmax, ymax)
                 for (insidel=false,insider=false,j=0; j<k; ++j)
                 {
                     e = edg[j];
-                    if (e[7]) continue; // redundant
-                    xi = e[6];
+                    if (e[8]) continue; // redundant
+                    xi = e[7];
                     if (false === xi) continue; // no intersection
                     // intersects segment on the left side
                     if (xi < x) insidel = !insidel;
@@ -1455,8 +1788,8 @@ function fill_path(set_pixel, rule, path, xmin, ymin, xmax, ymax)
                 for (insidel=0,insider=0,j=0; j<k; ++j)
                 {
                     e = edg[j];
-                    if (e[7]) continue; // redundant
-                    xi = e[6];
+                    if (e[8]) continue; // redundant
+                    xi = e[7];
                     if (false === xi) continue; // no intersection
                     if (xi < x || xi > x)
                     {
@@ -1474,19 +1807,20 @@ function fill_path(set_pixel, rule, path, xmin, ymin, xmax, ymax)
 }
 function point_in_stroke(x, y, path)
 {
-    var i, j, p, m, n = path.length,
+    var i, j, p, m,
+        d = path._d, n = d.length,
         x1, y1, x2, y2;
     for (i=0; i<n; ++i)
     {
-        p = path[i];
+        p = d[i];
         m = p.length - 2;
         if (0 < m)
         {
             for (j=0; j<m; j+=2)
             {
-                x1 = p[j];
+                x1 = +p[j];
                 y1 = p[j+1];
-                x2 = p[j+2];
+                x2 = +p[j+2];
                 y2 = p[j+3];
                 if (is_almost_equal((y2 - y1)*(x - x1), (y - y1)*(x2 - x1), 1e-4))
                 {
@@ -1499,9 +1833,8 @@ function point_in_stroke(x, y, path)
 }
 function point_in_path(x, y, path, rule)
 {
-    var edges = path_to_segments(path);
+    var edges = path._sd;
     if (!edges.length || y < edges.ymin || y > edges.ymax) return false;
-    edges.sort(asc);
     var n = edges.length,
         edg = new Array(n),
         i = 0, j, k, d, e, c,
@@ -1529,8 +1862,8 @@ function point_in_path(x, y, path, rule)
         xM = xi;
     }
     // store intersection point to be used later
-    e[6] = xi;
-    e[7] = 0;
+    e[7] = xi;
+    e[8] = 0;
     edg[0] = e;
     k = 1;
     // get rest edges that intersect at this y
@@ -1556,14 +1889,14 @@ function point_in_path(x, y, path, rule)
                 xM = stdMath.max(xM, xi);
             }
             // store intersection point to be used later
-            e[6] = xi;
-            e[7] = 0;
+            e[7] = xi;
+            e[8] = 0;
             edg[k++] = e;
         }
     }
     // some edges found are redundant, mark them
-    c = redundant(edg, k);
-    if (c+2 > k) return false === edg[0][6] ? false : is_almost_equal(x, edg[0][6]);
+    c = redundant(edg, k, y);
+    if (c+2 > k) return false === edg[0][7] ? false : is_almost_equal(x, edg[0][7]);
     if (xm > xM || x < xm || x > xM) return false;
     if (evenodd)
     {
@@ -1571,8 +1904,8 @@ function point_in_path(x, y, path, rule)
         for (insidel=false,insider=false,j=0; j<k; ++j)
         {
             e = edg[j];
-            if (e[7]) continue; // redundant
-            xi = e[6];
+            if (e[8]) continue; // redundant
+            xi = e[7];
             if (false === xi) continue; // no intersection
             // intersects segment on the left side
             if (xi <= x) insidel = !insidel;
@@ -1587,8 +1920,8 @@ function point_in_path(x, y, path, rule)
         for (insidel=0,insider=0,j=0; j<k; ++j)
         {
             e = edg[j];
-            if (e[7]) continue; // redundant
-            xi = e[6];
+            if (e[8]) continue; // redundant
+            xi = e[7];
             if (false === xi) continue; // no intersection
             if (xi < x || xi > x)
             {
@@ -1648,60 +1981,61 @@ function point_line_distance(p0, p1, p2)
 }
 function path_to_segments(polylines)
 {
+    if (!polylines) return [];
     var segments = [],
         m = polylines.length,
-        n, i, j, k, p,
+        n, i, j, k, l, p,
         ymin = Infinity,
         ymax = -Infinity;
-    for (k=0,j=0; j<m; ++j)
+    for (k=0,l=0,j=0; j<m; ++j)
     {
         p = polylines[j];
+        if (!p) continue;
         n = p.length - 2;
-        if (0 < n)
+        if (0 >= n) continue;
+        for (i=0; i<n; i+=2)
         {
-            for (i=0; i<n; i+=2)
+            if (p[i].params && p[i].params.type) {++k; l=0;}
+            ymin = stdMath.min(ymin, p[i+1]);
+            ymax = stdMath.max(ymax, p[i+1]);
+            if (p[i+1] > p[i+3])
             {
-                ymin = stdMath.min(ymin, p[i+1]);
-                ymax = stdMath.max(ymax, p[i+1]);
-                if (p[i+1] > p[i+3])
-                {
-                    segments.push([p[i+2], p[i+3], p[i], p[i+1], -1, k, 0, 0]);
-                }
-                else
-                {
-                    segments.push([p[i], p[i+1], p[i+2], p[i+3], 1, k, 0, 0]);
-                }
+                segments.push([+p[i+2], p[i+3], +p[i], p[i+1], -1, k, l, 0, 0]);
             }
-            ymin = stdMath.min(ymin, p[n+1]);
-            ymax = stdMath.max(ymax, p[n+1]);
-            ++k;
+            else
+            {
+                segments.push([+p[i], p[i+1], +p[i+2], p[i+3], 1, k, l, 0, 0]);
+            }
+            ++l;
         }
+        ymin = stdMath.min(ymin, p[n+1]);
+        ymax = stdMath.max(ymax, p[n+1]);
+        ++k; l=0;
     }
     segments.ymin = ymin;
     segments.ymax = ymax;
     return segments;
 }
-function redundant(edg, n)
+function redundant(edg, n, y)
 {
     var i, j, e, f, c = 0;
     for (i=0; i<n; ++i)
     {
         e = edg[i];
-        if (e[7]) continue;
+        if (e[8]) continue;
         for (j=i+1; j<n; ++j)
         {
             f = edg[j];
-            if (f[7] || (e[4] !== f[4]) || (e[5] !== f[5])) continue;
+            if (f[8] || (e[4] !== f[4]) || (e[5] !== f[5]) || (1 < stdMath.abs(e[6] - f[6]))) continue;
             if (
-                (/*(e[4] === f[4])
-                &&*/ is_almost_equal(e[0], f[0], 1e-5)
+                (is_almost_equal(e[0], f[0], 1e-5)
                 && is_almost_equal(e[1], f[1], 1e-5)
                 && is_almost_equal(e[2], f[2], 1e-5)
                 && is_almost_equal(e[3], f[3], 1e-5))
                 || (is_almost_equal(e[3], f[1], 1e-6))
             )
             {
-                f[7] = 1;
+                f[8] = 1;
                 ++c;
             }
         }
@@ -1761,6 +2095,17 @@ function is_strictly_equal(a, b)
 function clamp(x, min, max)
 {
     return stdMath.min(stdMath.max(x, min), max);
+}
+function mod(x, m, xmin, xmax)
+{
+    x -= m*stdMath.floor(x/m);
+    if (xmin > x) x += m;
+    if (xmax < x) x -= m;
+    return x;
+}
+function cmod(x)
+{
+    return mod(x, TWO_PI, 0, TWO_PI);
 }
 function asc(a, b)
 {
