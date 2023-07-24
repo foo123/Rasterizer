@@ -21,6 +21,7 @@ else if (!(name in root)) /* Browser/WebWorker/.. */
 
 var def = Object.defineProperty, PROTO = 'prototype',
     stdMath = Math, INF = Infinity, sqrt2 = stdMath.sqrt(2),
+    is_nan = isNaN, is_finite = isFinite,
     PI = stdMath.PI, TWO_PI = 2*PI, HALF_PI = PI/2,
     NUM_POINTS = 6, MIN_LEN = sqrt2, PIXEL_SIZE = 0.5,
     ImArray = 'undefined' !== typeof Uint8ClampedArray ? Uint8ClampedArray : ('undefined' !== typeof Uint8Array ? Uint8Array : Array);
@@ -84,37 +85,73 @@ Rasterizer.getRGBAFrom = function(RGBA) {
 Rasterizer.setRGBATo = function(IMG) {
     if ('function' === typeof IMG)
     {
-        return function(x, y, r, g, b, af, op) {
-            if (0 < af) IMG(x, y, r, g, b, af, op);
-        };
+        return IMG;
     }
     else
     {
         var width = IMG.width, height = IMG.height, data = IMG.data;
         return function(x, y, r, g, b, af, op) {
-            if (0 <= x && x < width && 0 <= y && y < height && 0 < af)
+            if (0 <= x && x < width && 0 <= y && y < height /*&& 0 < af*/)
             {
                 var index = (x + width*y) << 2,
                     r0 = data[index  ],
                     g0 = data[index+1],
                     b0 = data[index+2],
                     a0 = data[index+3]/255,
-                    a1 = af, ao;
+                    a1 = af, f0, f1,
+                    ro, go, bo, ao;
+                op = op || 'source-over';
+                /*
+                https://en.wikipedia.org/wiki/Alpha_compositing
+                https://graphics.pixar.com/library/Compositing/paper.pdf
+                op = cA*fA+cB*fB
+                operation fA fB?
+                clear 0 0
+                A 1 0
+                B 0 1
+                A over B 1 1-aA
+                B over A 1-aB 1
+                A in B aB 0
+                B in A 0 aA
+                A out B 1-aB 0
+                B out A 0 1-aA
+                A atop B aB 1-aA
+                B atop A 1-aB aA
+                A xor B l-aB 1-aA
+                */
                 switch(op)
                 {
-                    case 'source-over':
-                    default:
-                    // do alpha composition (over operation)
-                    ao = a1 + a0*(1 - a1);
-                    if (0 < ao)
-                    {
-                        data[index  ] = clamp(stdMath.round((r*a1 + r0*a0*(1 - a1))/ao), 0, 255);
-                        data[index+1] = clamp(stdMath.round((g*a1 + g0*a0*(1 - a1))/ao), 0, 255);
-                        data[index+2] = clamp(stdMath.round((b*a1 + b0*a0*(1 - a1))/ao), 0, 255);
-                        data[index+3] = clamp(stdMath.round(255*ao), 0, 255);
-                    }
-                    break;
+                    case 'clear': f1 = 0; f0 = 0; break;
+                    case 'copy': f1 = 1; f0 = 0; break;
+                    case 'xor': f1 = 1 - a0; f0 = 1 - a1; break;
+                    case 'destination-out': f0 = 1 - a1; f1 = 0; break;
+                    case 'destination-in': f1 = 0; f0 = a1; break;
+                    case 'destination-atop': f1 = 1 - a0; f0 = a1; break;
+                    case 'destination-over': f1 = 1 - a0; f0 = 1; break;
+                    case 'source-out': f1 = 1 - a0; f0 = 0; break;
+                    case 'source-in': f1 = a0; f0 = 0; break;
+                    case 'source-atop': f1 = a0; f0 = 1 - a1; break;
+                    case 'source-over':default: f1 = 1; f0 = 1 - a1; break;
                 }
+                ao = a1*f1 + a0*f0;
+                if (0 < ao)
+                {
+                    ro = clamp(stdMath.round((r*a1*f1 + r0*a0*f0)/ao), 0, 255);
+                    go = clamp(stdMath.round((g*a1*f1 + g0*a0*f0)/ao), 0, 255);
+                    bo = clamp(stdMath.round((b*a1*f1 + b0*a0*f0)/ao), 0, 255);
+                    ao = clamp(stdMath.round(255*ao), 0, 255);
+                }
+                else
+                {
+                    ro = 0;
+                    go = 0;
+                    bo = 0;
+                    ao = 0;
+                }
+                data[index  ] = ro;
+                data[index+1] = go;
+                data[index+2] = bo;
+                data[index+3] = ao;
             }
         };
     }
@@ -160,11 +197,11 @@ function RenderingContext2D(width, height, set_rgba_at)
     };
     stroke_pixel = function stroke_pixel(x, y, i) {
         var c = get_stroke_at(x, y), af = 3 < c.length ? c[3] : 1.0;
-        if (0 < af) set_rgba_at(x, y, c[0], c[1], c[2], af*i, op);
+        set_rgba_at(x, y, c[0], c[1], c[2], af*i, op);
     };
     fill_pixel = function fill_pixel(x, y, i) {
         var c = get_fill_at(x, y), af = 3 < c.length ? c[3] : 1.0;
-        if (0 < af) set_rgba_at(x, y, c[0], c[1], c[2], af*i, op);
+        set_rgba_at(x, y, c[0], c[1], c[2], af*i, op);
     };
 
     def(self, 'strokeStyle', {
@@ -189,7 +226,7 @@ function RenderingContext2D(width, height, set_rgba_at)
         },
         set: function(lw) {
             lw = +lw;
-            if ((0 <= lw) && isFinite(lw))
+            if (!is_nan(lw) && is_finite(lw) && (0 <= lw))
             {
                 lineWidth = lw;
             }
@@ -235,7 +272,7 @@ function RenderingContext2D(width, height, set_rgba_at)
         },
         set: function(ml) {
             ml = +ml;
-            if ((0 <= ml) && isFinite(ml))
+            if (!is_nan(ml) && is_finite(ml) && (0 <= ml))
             {
                 miterLimit = ml;
             }
@@ -247,7 +284,7 @@ function RenderingContext2D(width, height, set_rgba_at)
         },
         set: function(ldo) {
             ldo = +ldo;
-            if ((0 <= ldo) && isFinite(ldo))
+            if (!is_nan(ldo) && is_finite(ldo) && (0 <= ldo))
             {
                 lineDashOffset = ldo;
             }
@@ -275,7 +312,7 @@ function RenderingContext2D(width, height, set_rgba_at)
         },
         set: function(a) {
             a = +a;
-            if (0 <= a && a <= 1)
+            if (!is_nan(a) && (0 <= a && a <= 1))
             {
                 alpha = a;
             }
@@ -308,11 +345,11 @@ function RenderingContext2D(width, height, set_rgba_at)
     self.setTransform = function(a, b, c, d, e, f) {
         if (1 < arguments.length)
         {
-            transform = new Matrix2D(a, b, e, c, d, f);
+            transform = new Matrix2D(a, c, e, b, d, f);
         }
-        else if ((null != a.m00) && a.clone)
+        else if (a && (null != a.a) && (null != a.f))
         {
-            transform = a.clone();
+            transform = new Matrix2D(a.a, a.c, a.e, a.b, a.d, a.f);
         }
         currentPath._t = transform;
     };
@@ -341,8 +378,8 @@ function RenderingContext2D(width, height, set_rgba_at)
     self.arc = function(cx, cy, r, start, end, ccw) {
         currentPath.arc(cx, cy, r, start, end, ccw);
     };
-    self.ellipse = function(cx, cy, rx, ry, angle, start, end, fs) {
-        currentPath.ellipse(cx, cy, rx, ry, angle, start, end, fs);
+    self.ellipse = function(cx, cy, rx, ry, angle, start, end, ccw) {
+        currentPath.ellipse(cx, cy, rx, ry, angle, start, end, ccw);
     };
     self.arcTo = function(x1, y1, x2, y2, r) {
         currentPath.arcTo(x1, y1, x2, y2, r);
@@ -391,7 +428,7 @@ function RenderingContext2D(width, height, set_rgba_at)
         fillRule = String(fillRule || 'nonzero').toLowerCase();
         if ('evenodd' !== fillRule) fillRule = 'nonzero';
         path = path || currentPath;
-        var m = mult, lw = 0.65,
+        var m = mult, lw = 0.5/*0.65*/,
             xmin = 0, ymin = 0,
             xmax = width - 1, ymax = height - 1;
         canvas_reset();
@@ -415,6 +452,7 @@ function RenderingContext2D(width, height, set_rgba_at)
     self.isPointInPath = function(path, x, y, fillRule) {
         if (!(path instanceof Path2D))
         {
+            fillRule = y;
             y = x;
             x = path;
             path = currentPath;
@@ -707,32 +745,28 @@ function Path2D(transform)
         return self;
     };
     self.arcTo = function(x1, y1, x2, y2, r) {
+        if (0 > r) err('Negative radius in arcTo');
         var p = handle([
             x1, y1,
             x2, y2
         ], transform);
         if (!p) return self;
-        if (0 > r) err('Negative radius in arcTo');
         if (need_new_subpath)
         {
             d.push([p[0], p[1]]);
             need_new_subpath = false;
         }
-        var params = arc2arc(
+        p = arc2_points(
             +d[d.length-1][d[d.length-1].length-2],
             d[d.length-1][d[d.length-1].length-1],
             p[0], p[1],
             p[2], p[3],
             r
         );
-        d[d.length-1].push(params[0], params[1]);
-        if (2 < params.length)
-        {
-            p = arc_points(params[2], params[3], r, r, 0, params[4], params[5], params[6]);
-            p[0] = new N(+p[0], {type:'arc', lineCap:true, lineJoin:'bevel'});
-            p[p.length-2] = new N(+p[p.length-2], {type:'arc', lineCap:true, lineJoin:true});
-            d[d.length-1].push.apply(d[d.length-1], p);
-        }
+        p[0] = new N(+p[0], {type:'arc', lineCap:true, lineJoin:'bevel'});
+        p[p.length-2] = new N(+p[p.length-2], {type:'arc', lineCap:true, lineJoin:true});
+        d[d.length-1].push.apply(d[d.length-1], p);
+        sd = null;
         return self;
     };
     self.quadraticCurveTo = function(x1, y1, x2, y2) {
@@ -987,7 +1021,7 @@ function handle(coords, transform)
 {
     for (var i=0,n=coords.length; i<n; ++i)
     {
-        if (isNaN(coords[i]) || !isFinite(coords[i]))
+        if (is_nan(coords[i]) || !is_finite(coords[i]))
             return null;
     }
     if (transform)
@@ -1601,6 +1635,61 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
         }
     }
 }
+function arc_angles(ts, te, ccw)
+{
+    /*if (ccw)
+    {
+        delta = cmod(delta) - TWO_PI;
+        ts = cmod(ts);
+        te = ts + delta;
+    }*/
+    var t0 = cmod(ts), t1 = te + (t0 - ts);
+
+  if (!ccw && t1 - t0 >= TWO_PI)
+    t1 = t0 + TWO_PI;
+  else if (ccw && t0 - t1 >= TWO_PI)
+    t1 = t0 - TWO_PI;
+  else if (!ccw && t0 > t1)
+    t1 = t0 + (TWO_PI - cmod(t0 - t1));
+  else if (ccw && t0 < t1)
+    t1 = t0 - (TWO_PI - cmod(t1 - t0));
+    return [t0, t1];
+}
+function arc_points(cx, cy, rx, ry, a, ts, te, ccw)
+{
+    var tt = arc_angles(ts, te, ccw);
+    ts = tt[0]; te = tt[1];
+    var cos = a ? stdMath.cos(a) : 1,
+        sin = a ? stdMath.sin(a) : 0,
+        delta = te - ts,
+        arc = function(t) {
+            var p = ts + t*delta,
+                x = rx*stdMath.cos(p),
+                y = ry*stdMath.sin(p);
+            return [
+                cx + cos*x - sin*y,
+                cy + sin*x + cos*y
+            ];
+        },
+        points = sample_curve(arc);
+
+    // normally must call .closePath even if the whole TWO_PI arc is drawn
+    //if (stdMath.abs(delta)+1e-3 >= TWO_PI && (!is_almost_equal(points[0], points[points.length-2], 1e-3) || !is_almost_equal(points[1], points[points.length-1], 1e-3))) points.push(points[0], points[1]);
+    return points;
+}
+function arc2_points(x0, y0, x1, y1, x2, y2, r)
+{
+    var p = [], params = arc2arc(x0, y0, x1, y1, x2, y2, r);
+    if (params && 2 <= params.length)
+    {
+        p.push(params[0], params[1]);
+        if (2 < params.length)
+        {
+            p.push.apply(p, arc_points(params[2], params[3], r, r, 0, params[4], params[5], params[6]));
+        }
+    }
+    return p;
+}
 function arc2arc(x0, y0, x1, y1, x2, y2, r)
 {
     // adapted from node-canvas
@@ -1683,32 +1772,6 @@ function arc2arc(x0, y0, x1, y1, x2, y2, r)
     ,ccw && !is_almost_equal(TWO_PI, r) ? true : false
     ];
 }
-function arc_points(cx, cy, rx, ry, a, ts, te, ccw)
-{
-    var delta = te - ts;
-    if (ccw)
-    {
-        delta = cmod(delta) - TWO_PI;
-        ts = cmod(ts);
-        te = ts + delta;
-    }
-    var cos = a ? stdMath.cos(a) : 1,
-        sin = a ? stdMath.sin(a) : 0,
-        arc = function(t) {
-            var p = ts + t*delta,
-                x = rx*stdMath.cos(p),
-                y = ry*stdMath.sin(p);
-            return [
-                cx + cos*x - sin*y,
-                cy + sin*x + cos*y
-            ];
-        },
-        points = sample_curve(arc);
-
-    // normally must call .closePath even if the whole TWO_PI arc is drawn
-    if (stdMath.abs(delta)+1e-3 >= TWO_PI && (!is_almost_equal(points[0], points[points.length-2], 1e-3) || !is_almost_equal(points[1], points[points.length-1], 1e-3))) points.push(points[0], points[1]);
-    return points;
-}
 function bezier_points(c)
 {
     var quadratic = function(t) {
@@ -1781,8 +1844,8 @@ function fill_path(set_pixel, path, rule, xmin, ymin, xmax, ymax)
             xM = xi;
         }
         // store intersection point to be used later
-        e[7] = xi;
-        e[8] = 0;
+        e[8] = xi;
+        e[9] = 0;
         edg[0] = e;
         k = 1;
         // get rest edges that intersect at this y
@@ -1808,8 +1871,8 @@ function fill_path(set_pixel, path, rule, xmin, ymin, xmax, ymax)
                     xM = stdMath.max(xM, xi);
                 }
                 // store intersection point to be used later
-                e[7] = xi;
-                e[8] = 0;
+                e[8] = xi;
+                e[9] = 0;
                 edg[k++] = e;
             }
         }
@@ -1827,8 +1890,8 @@ function fill_path(set_pixel, path, rule, xmin, ymin, xmax, ymax)
                 for (insidel=false,insider=false,j=0; j<k; ++j)
                 {
                     e = edg[j];
-                    if (e[8]) continue; // redundant
-                    xi = e[7];
+                    if (e[9]) continue; // redundant
+                    xi = e[8];
                     if (false === xi) continue; // no intersection
                     // intersects segment on the left side
                     if (xi < x) insidel = !insidel;
@@ -1846,8 +1909,8 @@ function fill_path(set_pixel, path, rule, xmin, ymin, xmax, ymax)
                 for (insidel=0,insider=0,j=0; j<k; ++j)
                 {
                     e = edg[j];
-                    if (e[8]) continue; // redundant
-                    xi = e[7];
+                    if (e[9]) continue; // redundant
+                    xi = e[8];
                     if (false === xi) continue; // no intersection
                     if (xi < x || xi > x)
                     {
@@ -1920,8 +1983,8 @@ function point_in_path(x, y, path, rule)
         xM = xi;
     }
     // store intersection point to be used later
-    e[7] = xi;
-    e[8] = 0;
+    e[8] = xi;
+    e[9] = 0;
     edg[0] = e;
     k = 1;
     // get rest edges that intersect at this y
@@ -1947,14 +2010,14 @@ function point_in_path(x, y, path, rule)
                 xM = stdMath.max(xM, xi);
             }
             // store intersection point to be used later
-            e[7] = xi;
-            e[8] = 0;
+            e[8] = xi;
+            e[9] = 0;
             edg[k++] = e;
         }
     }
     // some edges found are redundant, mark them
     c = redundant(edg, k, y);
-    if (c+2 > k) return false === edg[0][7] ? false : is_almost_equal(x, edg[0][7]);
+    if (c+2 > k) return false === edg[0][8] ? false : is_almost_equal(x, edg[0][8]);
     if (xm > xM || x < xm || x > xM) return false;
     if (evenodd)
     {
@@ -1962,8 +2025,8 @@ function point_in_path(x, y, path, rule)
         for (insidel=false,insider=false,j=0; j<k; ++j)
         {
             e = edg[j];
-            if (e[8]) continue; // redundant
-            xi = e[7];
+            if (e[9]) continue; // redundant
+            xi = e[8];
             if (false === xi) continue; // no intersection
             // intersects segment on the left side
             if (xi <= x) insidel = !insidel;
@@ -1978,8 +2041,8 @@ function point_in_path(x, y, path, rule)
         for (insidel=0,insider=0,j=0; j<k; ++j)
         {
             e = edg[j];
-            if (e[8]) continue; // redundant
-            xi = e[7];
+            if (e[9]) continue; // redundant
+            xi = e[8];
             if (false === xi) continue; // no intersection
             if (xi < x || xi > x)
             {
@@ -2042,28 +2105,42 @@ function path_to_segments(polylines)
     if (!polylines) return [];
     var segments = [],
         m = polylines.length,
-        n, i, j, k, l, p,
-        ymin = Infinity,
-        ymax = -Infinity;
+        n, i, j, k, l, h = 0, p,
+        ymin = INF, ymax = -INF/*,
+        count = function(p, n, i) {
+            var h = 0;
+            if (p[i].params && p[i].params.type) {++h; i+=2;}
+            for (; i<n; i+=2)
+            {
+                if (p[i].params && p[i].params.type) return h;
+                ++h;
+            }
+            return h;
+        }*/;
     for (k=0,l=0,j=0; j<m; ++j)
     {
         p = polylines[j];
         if (!p) continue;
         n = p.length - 2;
         if (0 >= n) continue;
-        ++k; l = 1;
+        ++k; l = 1; //h = count(p, n, 0);
         for (i=0; i<n; i+=2)
         {
-            if (p[i].params && p[i].params.type) {++k; l = 1;}
+            if (p[i].params && p[i].params.type)
+            {
+                ++k;
+                l = 1;
+                //h = count(p, n, i);
+            }
             ymin = stdMath.min(ymin, p[i+1]);
             ymax = stdMath.max(ymax, p[i+1]);
             if (p[i+1] > p[i+3])
             {
-                segments.push([+p[i+2], p[i+3], +p[i], p[i+1], -1, k, l, 0, 0]);
+                segments.push([+p[i+2], p[i+3], +p[i], p[i+1], -1, k, l, h, 0, 0]);
             }
             else
             {
-                segments.push([+p[i], p[i+1], +p[i+2], p[i+3], 1, k, l, 0, 0]);
+                segments.push([+p[i], p[i+1], +p[i+2], p[i+3], 1, k, l, h, 0, 0]);
             }
             ++l;
         }
@@ -2080,11 +2157,11 @@ function redundant(edg, n, y)
     for (i=0; i<n; ++i)
     {
         e = edg[i];
-        if (e[8]) continue;
+        if (e[9]) continue;
         for (j=i+1; j<n; ++j)
         {
             f = edg[j];
-            if (f[8] || (e[4] !== f[4]) || (e[5] !== f[5]) || (1 < stdMath.abs(e[6] - f[6]))) continue;
+            if (f[9] || (e[4] !== f[4]) || (e[5] !== f[5]) || (1 < stdMath.abs((e[6]/* % e[7]*/) - (f[6]/* % f[7]*/)))) continue;
             if (
                 (is_almost_equal(e[0], f[0], 1e-5)
                 && is_almost_equal(e[1], f[1], 1e-5)
@@ -2094,7 +2171,7 @@ function redundant(edg, n, y)
                 || (is_almost_equal(e[1], f[3], 1e-6))
             )
             {
-                f[8] = 1;
+                f[9] = 1;
                 ++c;
             }
         }
