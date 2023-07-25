@@ -2,7 +2,7 @@
 
 Rasterize, stroke and fill lines, rectangles, curves and paths. Even without canvas.
 
-**version: 0.9.6** (21 kB minified)
+**version: 0.9.7** (23 kB minified)
 
 **What is not supported yet:**
 
@@ -30,5 +30,6 @@ Rasterize, stroke and fill lines, rectangles, curves and paths. Even without can
 
 ![gradient fill bezier evenodd](/fill-evenodd.png)
 
-![all tests](/all.png)
+![stroke-fill tests](/strokes-fills.png)
 
+![composition tests](/compositions.png)

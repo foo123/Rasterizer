@@ -3,7 +3,7 @@
 
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 
-<title>Rasterizer Test</title>
+<title>Rasterizer Stroke/Fill Test</title>
 <style type="text/css">
 body {
     font-size: 16px;
@@ -26,7 +26,7 @@ h4 {
 }
 </style>
 </head><body>
-<h1>Rasterizer <span id="ver"></span> Lines / Curves / Fills</h1>
+<h1>Rasterizer <span id="ver"></span> Strokes / Fills</h1>
 <div id="test1" class="canvas">
 <b>Canvas:</b><br/>
 </div>
@@ -511,71 +511,6 @@ function fillGradientDisk(cx, cy, r1, r2, fillRule, same)
     ctx.fill(fillRule);
     ctx2.putImageData(imData, 0, 0);
 }
-function globalAlpha()
-{
-    const canvas1 = document.createElement('canvas');
-    const canvas2 = document.createElement('canvas');
-    canvas1.width = w;
-    canvas1.height = h;
-    canvas2.width = w;
-    canvas2.height = h;
-    canvas1.style.width = String(w)+'px';
-    canvas1.style.height = String(h)+'px';
-    canvas2.style.width = String(w)+'px';
-    canvas2.style.height = String(h)+'px';
-
-    test1.appendChild(text('Alpha Test'));
-    test2.appendChild(text('Alpha Test'));
-    test1.appendChild(canvas1);
-    test2.appendChild(canvas2);
-    
-    const ctx1 = canvas1.getContext("2d");
-    const ctx2 = canvas2.getContext("2d");
-    
-    // Draw background
-    ctx1.fillStyle = "#FD0";
-    ctx1.fillRect(0, 0, 75, 75);
-    ctx1.fillStyle = "#6C0";
-    ctx1.fillRect(75, 0, 75, 75);
-    ctx1.fillStyle = "#09F";
-    ctx1.fillRect(0, 75, 75, 75);
-    ctx1.fillStyle = "#F30";
-    ctx1.fillRect(75, 75, 75, 75);
-    ctx1.fillStyle = "#FFF";
-    // Set transparency value
-    ctx1.globalAlpha = 0.2;
-    // Draw transparent circles
-    for (let i = 0; i < 7; ++i)
-    {
-      ctx1.beginPath();
-      ctx1.arc(75, 75, 10 + 10 * i, 0, Math.PI * 2, true);
-      ctx1.fill();
-    }
-
-    const imData = ctx2.getImageData(0, 0, w, h);
-    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
-    const ctx = r.getContext("2d");
-    // Draw background
-    ctx.fillStyle = [0xff, 0xdd, 0, 1];
-    ctx.fillRect(0, 0, 75, 75);
-    ctx.fillStyle = [0x66, 0xcc, 0, 1];
-    ctx.fillRect(75, 0, 75, 75);
-    ctx.fillStyle = [0, 0x99, 0xff, 1];
-    ctx.fillRect(0, 75, 75, 75);
-    ctx.fillStyle = [0xff, 0x33, 0, 1];
-    ctx.fillRect(75, 75, 75, 75);
-    ctx.fillStyle = [0xff, 0xff, 0xff, 1];
-    // Set transparency value
-    ctx.globalAlpha = 0.2;
-    // Draw transparent circles
-    for (let i = 0; i < 7; ++i)
-    {
-      ctx.beginPath();
-      ctx.arc(75, 75, 10 + 10 * i, 0, Math.PI * 2, true);
-      ctx.fill();
-    }
-    ctx2.putImageData(imData, 0, 0);
-}
 
 drawLine(20, 20, 80, 100, 1);
 drawLine(20, 20, 80, 100, 0.5);
@@ -614,7 +549,6 @@ fillGradientDisk(50, 50, 10, 40, 'nonzero', true);
 fillGradientDisk(50, 50, 10, 40, 'evenodd', true);
 fillGradientDisk(50, 50, 10, 40, 'nonzero', false);
 fillGradientDisk(50, 50, 10, 40, 'evenodd', false);
-globalAlpha();
 })();
 </script>
 </body></html>

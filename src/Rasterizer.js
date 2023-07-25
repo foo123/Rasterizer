@@ -2,7 +2,7 @@
 *   Rasterizer
 *   rasterize, stroke and fill lines, rectangles, curves and paths
 *
-*   @version 0.9.6
+*   @version 0.9.7
 *   https://github.com/foo123/Rasterizer
 *
 **/
@@ -52,7 +52,7 @@ function Rasterizer(width, height, set_rgba_at)
         err('Unsupported context "'+type+'"');
     };
 }
-Rasterizer.VERSION = '0.9.6';
+Rasterizer.VERSION = '0.9.7';
 Rasterizer[PROTO] = {
     constructor: Rasterizer,
     width: null,
@@ -98,47 +98,42 @@ Rasterizer.setRGBATo = function(IMG) {
                     g0 = data[index+1],
                     b0 = data[index+2],
                     a0 = data[index+3]/255,
-                    a1 = af, f0, f1,
-                    ro, go, bo, ao;
+                    a1 = af, f,
+                    ro = 0, go = 0,
+                    bo = 0, ao = 0;
                 op = op || 'source-over';
-                /*
-                https://en.wikipedia.org/wiki/Alpha_compositing
-                https://graphics.pixar.com/library/Compositing/paper.pdf
-                op = cA*fA+cB*fB
-                operation fA fB?
-                clear 0 0
-                A 1 0
-                B 0 1
-                A over B 1 1-aA
-                B over A 1-aB 1
-                A in B aB 0
-                B in A 0 aA
-                A out B 1-aB 0
-                B out A 0 1-aA
-                A atop B aB 1-aA
-                B atop A 1-aB aA
-                A xor B l-aB 1-aA
-                */
+                f = RenderingContext2D.CompositionMode[op];
+                if (!f)
+                {
+                    op = 'source-over';
+                    f = RenderingContext2D.CompositionMode[op];
+                }
                 switch(op)
                 {
-                    case 'clear': f1 = 0; f0 = 0; break;
-                    case 'copy': f1 = 1; f0 = 0; break;
-                    case 'xor': f1 = 1 - a0; f0 = 1 - a1; break;
-                    case 'destination-out': f0 = 1 - a1; f1 = 0; break;
-                    case 'destination-in': f1 = 0; f0 = a1; break;
-                    case 'destination-atop': f1 = 1 - a0; f0 = a1; break;
-                    case 'destination-over': f1 = 1 - a0; f0 = 1; break;
-                    case 'source-out': f1 = 1 - a0; f0 = 0; break;
-                    case 'source-in': f1 = a0; f0 = 0; break;
-                    case 'source-atop': f1 = a0; f0 = 1 - a1; break;
-                    case 'source-over':default: f1 = 1; f0 = 1 - a1; break;
+                    case 'clear':
+                    case 'copy':
+                    case 'xor':
+                    case 'destination-out':
+                    case 'destination-in':
+                    case 'destination-atop':
+                    case 'destination-over':
+                    case 'source-out':
+                    case 'source-in':
+                    case 'source-atop':
+                    case 'source-over':
+                        // alpha for these modes
+                        ao = f(a0, a0, a1, a1);
+                    break;
+                    default:
+                        // alpha for other modes
+                        ao = a1 + a0 - a1*a0;
+                    break;
                 }
-                ao = a1*f1 + a0*f0;
                 if (0 < ao)
                 {
-                    ro = clamp(stdMath.round((r*a1*f1 + r0*a0*f0)/ao), 0, 255);
-                    go = clamp(stdMath.round((g*a1*f1 + g0*a0*f0)/ao), 0, 255);
-                    bo = clamp(stdMath.round((b*a1*f1 + b0*a0*f0)/ao), 0, 255);
+                    ro = clamp(stdMath.round(255*f(a0*r0/255, a0, a1*r/255, a1)/ao), 0, 255);
+                    go = clamp(stdMath.round(255*f(a0*g0/255, a0, a1*g/255, a1)/ao), 0, 255);
+                    bo = clamp(stdMath.round(255*f(a0*b0/255, a0, a1*b/255, a1)/ao), 0, 255);
                     ao = clamp(stdMath.round(255*ao), 0, 255);
                 }
                 else
@@ -513,6 +508,56 @@ RenderingContext2D[PROTO] = {
     }
 };
 Rasterizer.RenderingContext2D = RenderingContext2D;
+
+RenderingContext2D.CompositionMode = {
+/*
+https://en.wikipedia.org/wiki/Alpha_compositing
+https://graphics.pixar.com/library/Compositing/paper.pdf
+op = cA*fA+cB*fB
+operation fA fB?
+clear 0 0
+A 1 0
+B 0 1
+A over B 1 1-aA
+B over A 1-aB 1
+A in B aB 0
+B in A 0 aA
+A out B 1-aB 0
+B out A 0 1-aA
+A atop B aB 1-aA
+B atop A 1-aB aA
+A xor B l-aB 1-aA
+*/
+'clear': function(Dca, Da, Sca, Sa){return 0;},
+'copy': function(Dca, Da, Sca, Sa){return Sca;},
+'xor': function(Dca, Da, Sca, Sa){return Sca * (1 - Da) + Dca * (1 - Sa);},
+'destination-out': function(Dca, Da, Sca, Sa){return Dca * (1 - Sa);},
+'destination-in': function(Dca, Da, Sca, Sa){return Dca * Sa;},
+'destination-atop': function(Dca, Da, Sca, Sa){return Sca * (1 - Da) + Dca * Sa;},
+'destination-over': function(Dca, Da, Sca, Sa){return Sca * (1 - Da) + Dca;},
+'source-out': function(Dca, Da, Sca, Sa){return Sca * (1 - Da);},
+'source-in': function(Dca, Da, Sca, Sa){return Sca * Da;},
+'source-atop': function(Dca, Da, Sca, Sa){return Sca * Da + Dca * (1 - Sa);},
+'source-over': function(Dca, Da, Sca, Sa){return Sca + Dca * (1 - Sa);},
+/*
+https://dev.w3.org/SVG/modules/compositing/master/
+Dca' = f(Sc, Dc) × Sa × Da  + Y × Sca × (1-Da)  + Z × Dca × (1-Sa)
+Da'  =         X × Sa × Da  + Y × Sa × (1-Da)   + Z × Da × (1-Sa)
+*/
+'multiply': function(Dca, Da, Sca, Sa){return Sca*Dca + Sca*(1 - Da) + Dca*(1 - Sa);},
+'screen': function(Dca, Da, Sca, Sa){return Sca + Dca - Sca * Dca;},
+'overlay': function(Dca, Da, Sca, Sa){return 2*Dca <= Da ? (2*Sca * Dca + Sca * (1 - Da) + Dca * (1 - Sa)) : (Sca * (1 + Da) + Dca * (1 + Sa) - 2 * Dca * Sca - Da * Sa);},
+'darken': function(Dca, Da, Sca, Sa){return stdMath.min(Sca * Da, Dca * Sa) + Sca * (1 - Da) + Dca * (1 - Sa);},
+'lighten': function(Dca, Da, Sca, Sa){return stdMath.max(Sca * Da, Dca * Sa) + Sca * (1 - Da) + Dca * (1 - Sa);},
+'color-dodge': function(Dca, Da, Sca, Sa){return Sca === Sa && 0 === Dca ? (Sca * (1 - Da)) : (Sca === Sa ? (Sa * Da + Sca * (1 - Da) + Dca * (1 - Sa)) : (Sa * Da * stdMath.min(1, Dca/Da * Sa/(Sa - Sca)) + Sca * (1 - Da) + Dca * (1 - Sa)));},
+'color-burn': function(Dca, Da, Sca, Sa){var m = Da ? Dca/Da : 0; return 0 === Sca && Dca === Da ? (Sa * Da + Dca * (1 - Sa)) : (0 === Sca ? (Dca * (1 - Sa)) : (Sa * Da * (1 - stdMath.min(1, (1 - m) * Sa/Sca)) + Sca * (1 - Da) + Dca * (1 - Sa)));},
+'hard-light': function(Dca, Da, Sca, Sa){return 2 * Sca <= Sa ? (2 * Sca * Dca + Sca * (1 - Da) + Dca * (1 - Sa)) : (Sca * (1 + Da) + Dca * (1 + Sa) - Sa * Da - 2 * Sca * Dca);},
+'soft-light': function(Dca, Da, Sca, Sa){var m = Da ? Dca/Da : 0; return 2 * Sca <= Sa ? (Dca * (Sa + (2 * Sca - Sa) * (1 - m)) + Sca * (1 - Da) + Dca * (1 - Sa)) : (2 * Sca > Sa && 4 * Dca <= Da ? (Da * (2 * Sca - Sa) * (16 * stdMath.pow(m, 3) - 12 * stdMath.pow(m, 2) - 3 * m) + Sca - Sca * Da + Dca) : (Da * (2 * Sca - Sa) * (stdMath.pow(m, 0.5) - m) + Sca - Sca * Da + Dca));},
+'difference': function(Dca, Da, Sca, Sa){return Sca + Dca - 2 * stdMath.min(Sca * Da, Dca * Sa);},
+'exclusion': function(Dca, Da, Sca, Sa){return (Sca * Da + Dca * Sa - 2 * Sca * Dca) + Sca * (1 - Da) + Dca * (1 - Sa);}
+};
+RenderingContext2D.CompositionMode['hardlight'] = RenderingContext2D.CompositionMode['hard-light'];
+RenderingContext2D.CompositionMode['softlight'] = RenderingContext2D.CompositionMode['soft-light'];
 
 function Path2D(transform)
 {

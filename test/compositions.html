@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html><head>
+
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+<title>Rasterizer Composition Test</title>
+<style type="text/css">
+body {
+    font-size: 16px;
+    font-family: Arial, san-serif;
+    background: white;
+}
+.canvas {
+    position: relative;
+    display: inline-block;
+    width: 200px;
+    margin-right: 10px
+}
+canvas {
+    position: relative;
+    display: block;
+    margin: 5px auto;
+}
+h4 {
+    display: block;
+}
+</style>
+</head><body>
+<h1>Rasterizer <span id="ver"></span> Alpha / Compositions</h1>
+<div id="test1" class="canvas">
+<b>Canvas:</b><br/>
+</div>
+<div id="test2" class="canvas">
+<b>Rasterizer:</b><br/>
+</div>
+<script src="./Gradient.js"></script>
+<script src="../src/Rasterizer.js"></script>
+<script>
+(function() {
+"use strict";
+document.getElementById('ver').textContent = 'v.'+Rasterizer.VERSION;
+
+const w = 200, h = 200,
+    test1 = document.getElementById('test1'),
+    test2 = document.getElementById('test2');
+
+function text(str, tag)
+{
+    var el = document.createElement(tag || 'span');
+    el.textContent = String(str);
+    return el;
+}
+function addColorStops(gradient)
+{
+    ([0.0, 0.33, 0.66, 1.0]).forEach((s, i) => {
+        gradient.addColorStop(s, (['red', 'yellow', 'green', 'blue'])[i]);
+    });
+    return gradient;
+}
+function globalAlpha()
+{
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+
+    test1.appendChild(text('Alpha Test'));
+    test2.appendChild(text('Alpha Test'));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+    
+    const ctx1 = canvas1.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
+    
+    // Draw background
+    ctx1.fillStyle = "#FD0";
+    ctx1.fillRect(0, 0, 75, 75);
+    ctx1.fillStyle = "#6C0";
+    ctx1.fillRect(75, 0, 75, 75);
+    ctx1.fillStyle = "#09F";
+    ctx1.fillRect(0, 75, 75, 75);
+    ctx1.fillStyle = "#F30";
+    ctx1.fillRect(75, 75, 75, 75);
+    ctx1.fillStyle = "#FFF";
+    // Set transparency value
+    ctx1.globalAlpha = 0.2;
+    // Draw transparent circles
+    for (let i = 0; i < 7; ++i)
+    {
+      ctx1.beginPath();
+      ctx1.arc(75, 75, 10 + 10 * i, 0, Math.PI * 2, true);
+      ctx1.fill();
+    }
+
+    const imData = ctx2.getImageData(0, 0, w, h);
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
+    const ctx = r.getContext("2d");
+    // Draw background
+    ctx.fillStyle = [0xff, 0xdd, 0, 1];
+    ctx.fillRect(0, 0, 75, 75);
+    ctx.fillStyle = [0x66, 0xcc, 0, 1];
+    ctx.fillRect(75, 0, 75, 75);
+    ctx.fillStyle = [0, 0x99, 0xff, 1];
+    ctx.fillRect(0, 75, 75, 75);
+    ctx.fillStyle = [0xff, 0x33, 0, 1];
+    ctx.fillRect(75, 75, 75, 75);
+    ctx.fillStyle = [0xff, 0xff, 0xff, 1];
+    // Set transparency value
+    ctx.globalAlpha = 0.2;
+    // Draw transparent circles
+    for (let i = 0; i < 7; ++i)
+    {
+      ctx.beginPath();
+      ctx.arc(75, 75, 10 + 10 * i, 0, Math.PI * 2, true);
+      ctx.fill();
+    }
+    ctx2.putImageData(imData, 0, 0);
+}
+function globalComposition(op)
+{
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+
+    test1.appendChild(text('Compose Test ('+op+')'));
+    test2.appendChild(text('Compose Test ('+op+')'));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+    
+    const ctx1 = canvas1.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
+    
+    ctx1.globalCompositeOperation = op;
+    ctx1.fillStyle = "rgba(0, 0, 255, 0.8)";
+    ctx1.fillRect(10, 10, 100, 100);
+    ctx1.fillStyle = "rgba(255, 0, 0, 0.5)";
+    ctx1.fillRect(50, 50, 100, 100);
+    
+    const imData = ctx2.getImageData(0, 0, w, h);
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
+    const ctx = r.getContext("2d");
+    ctx.globalCompositeOperation = op;
+    ctx.fillStyle = [0, 0, 255, 0.8];
+    ctx.fillRect(10, 10, 100, 100);
+    ctx.fillStyle = [255, 0, 0, 0.5];
+    ctx.fillRect(50, 50, 100, 100);
+    ctx2.putImageData(imData, 0, 0);
+}
+
+globalAlpha();
+globalComposition('source-over');
+globalComposition('destination-over');
+globalComposition('xor');
+globalComposition('multiply');
+globalComposition('screen');
+globalComposition('overlay');
+globalComposition('darken');
+globalComposition('lighten');
+globalComposition('color-dodge');
+globalComposition('color-burn');
+globalComposition('hard-light');
+globalComposition('soft-light');
+globalComposition('difference');
+globalComposition('exclusion');
+})();
+</script>
+</body></html>
