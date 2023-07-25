@@ -346,6 +346,100 @@ function drawArcTo()
 
     ctx2.putImageData(imData, 0, 0);
 }
+function drawArcs(sx, sy, angle)
+{
+    if (null == sx) sx = 1;
+    if (null == sy) sy = 1;
+    angle = angle || 0;
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+    test1.appendChild(text('Transformed Arc ('+sx+','+sy+','+angle+')'));
+    test2.appendChild(text('Transformed Arc ('+sx+','+sy+','+angle+')'));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+
+    const ctx1 = canvas1.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
+
+    ctx1.beginPath();
+    ctx1.strokeStyle = "#555";
+    ctx1.translate(100, 100);
+    ctx1.scale(sx, sy);
+    ctx1.rotate(angle);
+    ctx1.translate(-100, -100);
+    ctx1.arc(100, 100, 20, 0, 3*Math.PI/2, false);
+    ctx1.stroke();
+
+    const imData = ctx2.getImageData(0, 0, w, h);
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
+    const ctx = r.getContext("2d");
+    ctx.beginPath();
+    ctx.strokeStyle = [0x55, 0x55, 0x55];
+    ctx.translate(100, 100);
+    ctx.scale(sx, sy);
+    ctx.rotate(angle);
+    ctx.translate(-100, -100);
+    ctx.arc(100, 100, 20, 0, 3*Math.PI/2, false, 1);
+    ctx.stroke();
+    ctx2.putImageData(imData, 0, 0);
+    /*
+    console.log(angle, ctx.getTransform().a,ctx.getTransform().b,ctx.getTransform().c,ctx.getTransform().d,ctx.getTransform().e,ctx.getTransform().f);
+    console.log(angle, ctx1.getTransform().a,ctx1.getTransform().b,ctx1.getTransform().c,ctx1.getTransform().d,ctx1.getTransform().e,ctx1.getTransform().f);
+    */
+}
+function drawBeziers(c, angle)
+{
+    angle = angle || 0;
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+    test1.appendChild(text('Transformed Bezier ('+angle+')'));
+    test2.appendChild(text('Transformed Bezier ('+angle+')'));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+
+    const ctx1 = canvas1.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
+
+    ctx1.beginPath();
+    ctx1.strokeStyle = "#555";
+    ctx1.translate(100, 100);
+    ctx1.rotate(angle);
+    ctx1.translate(-100, -100);
+    //ctx1.scale(2, 0.5);
+    ctx1.moveTo(c[0], c[1]);
+    ctx1.bezierCurveTo(c[2], c[3], c[4], c[5], c[6], c[7]);
+    ctx1.stroke();
+
+    const imData = ctx2.getImageData(0, 0, w, h);
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
+    const ctx = r.getContext("2d");
+    ctx.beginPath();
+    ctx.strokeStyle = [0x55, 0x55, 0x55];
+    ctx.translate(100, 100);
+    ctx.rotate(angle);
+    ctx.translate(-100, -100);
+    //ctx.scale(2, 0.5);
+    ctx.moveTo(c[0], c[1]);
+    ctx.bezierCurveTo(c[2], c[3], c[4], c[5], c[6], c[7]);
+    ctx.stroke();
+    ctx2.putImageData(imData, 0, 0);
+}
 function drawRoundRect()
 {
     const canvas1 = document.createElement('canvas');
@@ -517,10 +611,62 @@ function fillGradientDisk(cx, cy, r1, r2, fillRule, same)
     ctx.fill(fillRule);
     ctx2.putImageData(imData, 0, 0);
 }
+function clip()
+{
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+
+    test1.appendChild(text('Complex Clipping'));
+    test2.appendChild(text('Complex Clipping'));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+
+    const ctx1 = canvas1.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
+
+    // Create two clipping paths
+    let circlePath = new Path2D();
+    circlePath.arc(75, 75, 75, 0, 2 * Math.PI);
+    let squarePath = new Path2D();
+    squarePath.rect(10, 10, 130, 130);
+    // Set the clip to the circle
+    ctx1.clip(circlePath);
+    // Set the clip to be the intersection of the circle and the square
+    ctx1.clip(squarePath);
+    // Draw stuff that gets clipped
+    ctx1.fillStyle = "#00f";
+    ctx1.fillRect(0, 0, w, h);
+
+    const imData = ctx2.getImageData(0, 0, w, h);
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
+    const ctx = r.getContext("2d");
+    // Create two clipping paths
+    let circlePath2 = new Rasterizer.RenderingContext2D.Path2D();
+    circlePath2.arc(75, 75, 75, 0, 2 * Math.PI);
+    let squarePath2 = new Rasterizer.RenderingContext2D.Path2D();
+    squarePath2.rect(10, 10, 130, 130);
+    // Set the clip to the circle
+    ctx.clip(circlePath2);
+    // Set the clip to be the intersection of the circle and the square
+    ctx.clip(squarePath2);
+    // Draw stuff that gets clipped
+    ctx.fillStyle = [0, 0, 0xff];
+    ctx.fillRect(0, 0, w, h);
+    ctx2.putImageData(imData, 0, 0);
+}
 
 drawLine(20, 20, 80, 100, 1);
 drawLine(20, 20, 80, 100, 0.5);
 drawGradientLine(6, 20, 120, 100, 20, [/*4, 10*/], 'square');
+//drawGradientLine(30, 30, 100, 30, 20, [/*4, 10*/], 'round');
 drawPolyline(60, 20, 20, 20, 20, 60, 20, [/*10, 10*/], 'butt', 'bevel');
 drawPolyline(10, 10, 60, 10, 60, 60, 20, [], 'butt', 'bevel');
 drawPolyline(20, 10, 20, 60, 60, 60, 20, [], 'butt', 'bevel');
@@ -545,6 +691,8 @@ drawPolyline(10, 10, 15, 70, 25, 10, 20, [], 'butt', 'miter', 100);
 drawPolyline(10, 10, 15, 70, 25, 10, 20, [], 'butt', 'miter', 1);
 drawGradientCircles();
 drawArcTo();
+drawArcs(4, 1, -Math.PI/4);
+drawBeziers([10, 10, 200, 100, 10, 100, 70, 10], -Math.PI/4);
 drawRoundRect();
 drawGradientArc(50, 50, 20, 40, 30*Math.PI/180, 1, Math.PI/2, false, 2, [], 'butt', 'bevel');
 drawGradientArc(50, 50, 20, 40, 30*Math.PI/180, 1, Math.PI/2, true, 2, [], 'butt', 'bevel');
@@ -555,6 +703,7 @@ fillGradientDisk(50, 50, 10, 40, 'nonzero', true);
 fillGradientDisk(50, 50, 10, 40, 'evenodd', true);
 fillGradientDisk(50, 50, 10, 40, 'nonzero', false);
 fillGradientDisk(50, 50, 10, 40, 'evenodd', false);
+clip();
 })();
 </script>
 </body></html>

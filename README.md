@@ -2,14 +2,13 @@
 
 Rasterize, stroke and fill lines, rectangles, curves and paths. Even without canvas.
 
-**version: 0.9.7** (23 kB minified)
+**version: 0.9.8** (25 kB minified)
 
 **What is not supported yet:**
 
-1. `round` lineCap (will be implemented)
-2. `round` lineJoin (will be implemented)
-3. lineDash/lineDashOffset (will be implemented)
-4. text (`strokeText`, `fillText`, ..)  (will not be implemented but can be simulated through rest API)
+1. `"round"` `lineCap` and `lineJoin` is partially implemented
+2. `lineDash/lineDashOffset` (will be implemented)
+2. text (`strokeText`, `fillText`, ..)  (will **not** be implemented but can be simulated by drawing the actual curves in the font)
 
 
 **Test/Demo:**
