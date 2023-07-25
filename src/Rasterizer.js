@@ -323,16 +323,16 @@ function RenderingContext2D(width, height, set_rgba_at)
     });
 
     self.scale = function(sx, sy) {
-        currentPath._t = transform = Matrix2D.scale(sx, sy).mul(transform);
+        currentPath._t = transform = transform.mul(Matrix2D.scale(sx, sy));
     };
     self.rotate = function(angle) {
-        currentPath._t = transform = Matrix2D.rotate(angle || 0).mul(transform);
+        currentPath._t = transform = transform.mul(Matrix2D.rotate(angle || 0));
     };
     self.translate = function(tx, ty) {
-        currentPath._t = transform = Matrix2D.translate(tx || 0, ty || 0).mul(transform);
+        currentPath._t = transform = transform.mul(Matrix2D.translate(tx || 0, ty || 0));
     };
     self.transform = function(a, b, c, d, e, f) {
-        currentPath._t = transform = (new Matrix2D(a, c, e, b, d, f)).mul(transform);
+        currentPath._t = transform = transform.mul(new Matrix2D(a, c, e, b, d, f));
     };
     self.getTransform = function() {
         return transform.clone();
@@ -494,6 +494,7 @@ RenderingContext2D[PROTO] = {
     fill: null,
     isPointInStroke: null,
     isPointInPath: null,
+    clip: NOOP,
     createImageData: function(width, height) {
         return Rasterizer.createImageData(width, height);
     },
@@ -657,7 +658,7 @@ function Path2D(transform)
         if (!p) return self;
         var radii = (arguments[4] && arguments[4].push ? arguments[4] : [].slice.call(arguments, 4)).filter(function(r) {return 0 < r;});
         if (1 > radii.length || 4 < radii.length) err('Invalid radii in roundRect');
-        var upperLeft, upperRight, lowerRight, lowerLeft, ccw = false, t;
+        var upperLeft, upperRight, lowerRight, lowerLeft, t;
         if (4 === radii.length)
         {
             upperLeft = radii[0];
@@ -688,7 +689,6 @@ function Path2D(transform)
         }
         if (0 > w)
         {
-            ccw = true;
             x += w;
             w = -w;
             t = upperLeft;
@@ -700,7 +700,6 @@ function Path2D(transform)
         }
         if (0 > h)
         {
-            ccw = !ccw;
             y += h;
             h = -h;
             t = upperLeft;
@@ -722,35 +721,31 @@ function Path2D(transform)
             lowerLeft *= scale;
             lowerRight *= scale;
         }
-        var p = [
-        x + upperLeft, y
-        ];
-        if (ccw)
-        {
-            p.push.apply(p, arc_points(x + upperLeft, y + upperLeft, upperLeft, upperLeft, 0, PI, 3*HALF_PI, ccw));
-            p.push(x, y + upperLeft);
-            p.push.apply(p, arc_points(x + lowerLeft, y + h - lowerLeft, lowerLeft, lowerLeft, 0, HALF_PI, PI, ccw));
-            p.push(x + lowerLeft, y + h);
-            p.push.apply(p, arc_points(x + w - lowerRight, y + h - lowerRight, lowerRight, lowerRight, 0, 0, HALF_PI, ccw));
-            p.push(x + w, y + h - lowerRight);
-            p.push.apply(p, arc_points(x + w - upperRight, y + upperRight, upperRight, upperRight, 0, 3*HALF_PI, TWO_PI, ccw));
-            p.push(x + w - upperRight, y);
-        }
-        else
-        {
-            p.push(x + w - upperRight, y);
-            p.push.apply(p, arc_points(x + w - upperRight, y + upperRight, upperRight, upperRight, 0, 3*HALF_PI, TWO_PI, ccw));
-            p.push(x + w, y + h - lowerRight);
-            p.push.apply(p, arc_points(x + w - lowerRight, y + h - lowerRight, lowerRight, lowerRight, 0, 0, HALF_PI, ccw));
-            p.push(x + lowerLeft, y + h);
-            p.push.apply(p, arc_points(x + lowerLeft, y + h - lowerLeft, lowerLeft, lowerLeft, 0, HALF_PI, PI, ccw));
-            p.push(x, y + upperLeft);
-            p.push.apply(p, arc_points(x + upperLeft, y + upperLeft, upperLeft, upperLeft, 0, PI, 3*HALF_PI, ccw));
-        }
-        p.push(x + upperLeft, y);
+        var o = transform.transform(0, 0),
+            point = function(p, x, y) {
+                var t = transform.transform(x, y);
+                p.push(t[0], t[1]);
+            },
+            arc = function(p, x0, y0, x1, y1, x2, y2, r) {
+                var t0 = transform.transform(x0, y0),
+                    t1 = transform.transform(x1, y1),
+                    t2 = transform.transform(x2, y2),
+                    tr = transform.transform(r, 0);
+                p.push.apply(p, arc2_points(t0[0], t0[1], t1[0], t1[1], t2[0], t2[1], hypot(tr[0] - o[0], tr[1] - o[1])));
+            };
+        p = [];
+        point(p, x + upperLeft, y);
+        point(p, x + w - upperRight, y);
+        arc(p, x + w - upperRight, y, x + w, y, x + w, y + upperRight, upperRight);
+        point(p, x + w, y + h - lowerRight);
+        arc(p, x + w, y + h - lowerRight, x + w, y + h, x + w - lowerRight, y + h, lowerRight);
+        point(p, x + lowerLeft, y + h);
+        arc(p, x + lowerLeft, y + h, x, y + h, x, y + h - lowerLeft, lowerLeft);
+        point(p, x, y + upperLeft);
+        arc(p, x, y + upperLeft, x, y, x + upperLeft, y, upperLeft);
         p[0] = new N(+p[0], {lineCap:'butt', lineJoin:'bevel'});
         d.push(p);
-        d.push([x, y]);
+        d.push(transform.transform(x, y));
         sd = null;
         need_new_subpath = false;
         return self;
@@ -1038,6 +1033,18 @@ Matrix2D.rotate = function(theta, ox, oy) {
     return new Matrix2D(
     cos, -sin, ox - cos*ox + sin*oy,
     sin,  cos, oy - cos*oy - sin*ox
+    );
+};
+Matrix2D.skewX = function(s) {
+    return new Matrix2D(
+    1, s || 0, 0,
+    0, 1, 0
+    );
+};
+Matrix2D.skewY = function(s) {
+    return new Matrix2D(
+    1, 0, 0,
+    s || 0, 1, 0
     );
 };
 Matrix2D.EYE = function() {
