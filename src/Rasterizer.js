@@ -26,12 +26,13 @@ var def = Object.defineProperty, PROTO = 'prototype',
     NUM_POINTS = 6, MIN_LEN = sqrt2, PIXEL_SIZE = 0.5,
     ImArray = 'undefined' !== typeof Uint8ClampedArray ? Uint8ClampedArray : ('undefined' !== typeof Uint8Array ? Uint8Array : Array);
 
-function Rasterizer(width, height, set_rgba_at)
+function Rasterizer(width, height, set_rgba_at, get_rgba_from)
 {
     var self = this;
-    if (!(self instanceof Rasterizer)) return new Rasterizer(width, height, set_rgba_at);
+    if (!(self instanceof Rasterizer)) return new Rasterizer(width, height, set_rgba_at, get_rgba_from);
 
-    var ctx2d = new RenderingContext2D(width, height, set_rgba_at);
+    get_rgba_from = get_rgba_from || (set_rgba_at && set_rgba_at.$imgData ? Rasterizer.getRGBAFrom(set_rgba_at.$imgData) : function(x, y) {return [0,0,0,0];});
+    var ctx2d = new RenderingContext2D(width, height, set_rgba_at, get_rgba_from);
 
     def(self, 'width', {
         get: function() {
@@ -59,19 +60,29 @@ Rasterizer[PROTO] = {
     height: null,
     getContext: null
 };
-Rasterizer.createImageData = function(width, height) {
-    return {
-        data: new ImArray((width*height) << 2),
-        width: width,
-        height: height
-    };
-};
 Rasterizer.getRGBAFrom = function(RGBA) {
     if ('function' === typeof RGBA)
     {
         return function(x, y) {
             var c = RGBA(x, y);
             return [c[0], c[1], c[2], 3 < c.length ? c[3]/255 : 1.0];
+        };
+    }
+    else if (RGBA.data && null != RGBA.width && null != RGBA.height)
+    {
+        return function(x, y) {
+            var w = RGAB.width, h = RGAB.height, data = RGBA.data, index;
+            if (0 <= x && x < w && 0 <= y && y < h)
+            {
+                index = (x + w*y) << 2;
+                return [
+                    data[index  ],
+                    data[index+1],
+                    data[index+2],
+                    data[index+3]/255
+                ];
+            }
+            return [0,0,0,0];
         };
     }
     else
@@ -90,7 +101,7 @@ Rasterizer.setRGBATo = function(IMG) {
     else
     {
         var width = IMG.width, height = IMG.height, data = IMG.data;
-        return function(x, y, r, g, b, af, op) {
+        var setter = function(x, y, r, g, b, af, op) {
             if (0 <= x && x < width && 0 <= y && y < height /*&& 0 < af*/)
             {
                 var index = (x + width*y) << 2,
@@ -149,16 +160,19 @@ Rasterizer.setRGBATo = function(IMG) {
                 data[index+3] = ao;
             }
         };
+        setter.$imgData = IMG;
+        return setter;
     }
 };
 
-function RenderingContext2D(width, height, set_rgba_at)
+function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
 {
     var self = this, get_stroke_at, get_fill_at,
         canvas = null, clip_canvas = null,
         canvas_reset, canvas_output, stack,
         mult = 1, reset, fill,
         set_pixel, stroke_pixel, fill_pixel,
+        get_data, set_data,
         lineCap, lineJoin, miterLimit,
         lineWidth, lineDash, lineDashOffset,
         transform, alpha, op, currentPath;
@@ -539,6 +553,108 @@ function RenderingContext2D(width, height, set_rgba_at)
         return point_in_path(x || 0, y || 0, path || currentPath, fillRule);
     };
 
+    get_data = function(D, W, H, x0, y0, x1, y1) {
+        x0 = stdMath.min(x0, W-1); y0 = stdMath.min(y0, H-1);
+        x1 = stdMath.min(x1, W-1); y1 = stdMath.min(y1, H-1);
+        if ((x1 < x0) || (y1 < y0)) return new ImArray(0);
+        var c, x, y, i, I, w = x1-x0+1, h = y1-y0+1, size = (w*h) << 2, d = new ImArray(size);
+        if (D)
+        {
+            for(x=x0,y=y0,i=0; y<=y1; i+=4,++x)
+            {
+                if (x>x1) {x=x0; ++y;}
+                I = (y*W + x) << 2;
+                d[i  ] = D[I  ];
+                d[i+1] = D[I+1];
+                d[i+2] = D[I+2];
+                d[i+3] = D[I+3];
+            }
+        }
+        else
+        {
+            for(x=x0,y=y0,i=0; y<=y1; i+=4,++x)
+            {
+                if (x>x1) {x=x0; ++y;}
+                c = get_rgba_from(x, y);
+                d[i  ] = clamp(c[0], 0, 255);
+                d[i+1] = clamp(c[1], 0, 255);
+                d[i+2] = clamp(c[2], 0, 255);
+                d[i+3] = clamp(stdMath.round(c[3]*255), 0, 255);
+            }
+        }
+        return d;
+    };
+    set_data = function(D, W, H, d, w, h, x0, y0, x1, y1, X0, Y0) {
+        var i, I, x, y;
+        //if ( !D.length || !d.length || !w || !h || !W || !H ) return D;
+        x0 = stdMath.min(x0, w-1); y0 = stdMath.min(y0, h-1);
+        X0 = stdMath.min(X0, W-1); Y0 = stdMath.min(Y0, H-1);
+        x1 = stdMath.min(x1, w-1); y1 = stdMath.min(y1, h-1);
+        X0 -= x0; Y0 -= y0;
+        for(x=x0,y=y0; y<=y1; ++x)
+        {
+            if (x>x1) {x=x0; ++y;}
+            if ((y+Y0 >= H) || (x+X0 >= W)) continue;
+            i = (y*w + x) << 2;
+            /*I = ((y+Y0)*W + x+X0) << 2;
+            D[I  ] = d[i  ];
+            D[I+1] = d[i+1];
+            D[I+2] = d[i+2];
+            D[I+3] = d[i+3];*/
+            set_rgba_at(x+X0, y+Y0, d[i  ], d[i+1], d[i+2], d[i+3]/255, 'copy');
+        }
+        return D;
+    };
+    self.drawImage = function(imgData, sx, sy, sw, sh, dx, dy, dw, dh) {
+        var W = width, H = height,
+            w = imgData.width, h = imgData.height,
+            idata = imgData.data,
+            argslen = arguments.length,
+            resize = RenderingContext2D.Interpolation.bilinear
+        ;
+        sx = sx || 0;
+        sy = sy || 0;
+        if (3 === argslen)
+        {
+            dx = sx; dy = sy;
+            set_data(null, W, H, idata, w, h, 0, 0, w-1, h-1, dx, dy);
+        }
+        else if (5 === argslen)
+        {
+            dx = sx; dy = sy;
+            dw = sw; dh = sh;
+            if ((w === dw) && (h === dh))
+                set_data(null, W, H, idata, dw, dh, 0, 0, dw-1, dh-1, dx, dy);
+            else
+                set_data(null, W, H, resize(idata, w, h, dw, dh), dw, dh, 0, 0, dw-1, dh-1, dx, dy);
+        }
+        else
+        {
+            if ((sw === dw) && (sh === dh))
+                set_data(null, W, H, get_data(idata, w, h, sx, sy, sx+sw-1, sy+sh-1), dw, dh, 0, 0, dw-1, dh-1, dx, dy);
+            else
+                set_data(null, W, H, resize(get_data(idata, w, h, sx, sy, sx+sw-1, sy+sh-1), sw, sh, dw, dh), dw, dh, 0, 0, dw-1, dh-1, dx, dy);
+        }
+    };
+    self.getImageData = function(x, y, w, h) {
+        var W = width, H = height, x1, y1, x2, y2;
+        if (null == x) x = 0;
+        if (null == y) y = 0;
+        if (null == w) w = W;
+        if (null == h) h = H;
+        x1 = stdMath.max(0, stdMath.min(x, w-1, W-1));
+        y1 = stdMath.max(0, stdMath.min(y, h-1, H-1));
+        x2 = stdMath.min(x1+w-1, w-1, W-1);
+        y2 = stdMath.min(y1+h-1, h-1, H-1);
+        return {data: get_data(null, W, H, x1, y1, x2, y2), width: x2-x1+1, height: y2-y1+1};
+    };
+    self.putImageData = function(data, x, y) {
+        var W = width, H = height, w = data.width, h = data.height;
+        if (null == x) x = 0;
+        if (null == y) y = 0;
+        set_data(null, W, H, data.data, w, h, 0, 0, w-1, h-1, x, y);
+    };
+
     reset(true);
 }
 RenderingContext2D[PROTO] = {
@@ -584,11 +700,20 @@ RenderingContext2D[PROTO] = {
     isPointInStroke: null,
     isPointInPath: null,
     createImageData: function(width, height) {
-        return Rasterizer.createImageData(width, height);
+        if (null == height && null != width.width && null != width.height)
+        {
+            height = width.height;
+            width = width.width;
+        }
+        return {
+            data: new ImArray((width*height) << 2),
+            width: width,
+            height: height
+        };
     },
-    getImageData: NOOP,
-    putImageData: NOOP,
-    drawImage: NOOP,
+    getImageData: null,
+    putImageData: null,
+    drawImage: null,
     // handled through Gradient.js for example
     createLinearGradient: NOOP,
     createRadialGradient: NOOP,
@@ -651,6 +776,291 @@ Da'  =         X × Sa × Da  + Y × Sa × (1-Da)   + Z × Da × (1-Sa)
 RenderingContext2D.CompositionMode['hardlight'] = RenderingContext2D.CompositionMode['hard-light'];
 RenderingContext2D.CompositionMode['softlight'] = RenderingContext2D.CompositionMode['soft-light'];
 
+RenderingContext2D.Interpolation = {
+'nearest': function(im, w, h, nw, nh) {
+    // http://pixinsight.com/doc/docs/InterpolationAlgorithms/InterpolationAlgorithms.html
+    var size = (nw*nh) << 2,
+        interpolated = new ImArray(size),
+        rx = (w-1)/nw, ry = (h-1)/nh,
+        i, j, x, y, xi, yi, pixel, index,
+        yw, xoff, yoff, w4 = w << 2
+    ;
+    i=0; j=0; x=0; y=0; yi=0; yw=0; yoff=0;
+    for (index=0; index<size; index+=4,++j,x+=rx)
+    {
+        if (j >= nw) {j=0; x=0; ++i; y+=ry; yi=y|0; yw=yi*w; yoff=y - (yi<0.5 ? 0 : w4);}
+
+        xi = x|0; xoff = x - (xi<0.5 ? 0 : 4);
+
+        pixel = ((yw + xi)<<2) + xoff + yoff;
+
+        interpolated[index  ]    = im[pixel  ];
+        interpolated[index+1]    = im[pixel+1];
+        interpolated[index+2]    = im[pixel+2];
+        interpolated[index+3]    = im[pixel+3];
+    }
+    return interpolated;
+},
+'bilinear': function(im, w, h, nw, nh) {
+    // http://pixinsight.com/doc/docs/InterpolationAlgorithms/InterpolationAlgorithms.html
+    // http://tech-algorithm.com/articles/bilinear-image-scaling/
+    var size = (nw*nh) << 2,
+        interpolated = new ImArray(size),
+        rx = (w-1)/nw, ry = (h-1)/nh,
+        A, B, C, D, a, b, c, d,
+        i, j, x, y, xi, yi, pixel, index,
+        yw, dx, dy, w4 = w << 2
+    ;
+    i=0; j=0; x=0; y=0; yi=0; yw=0; dy=0;
+    for (index=0; index<size; index+=4,++j,x+=rx)
+    {
+        if (j >= nw) {j=0; x=0; ++i; y+=ry; yi=y|0; dy=y - yi; yw=yi*w;}
+
+        xi = x|0; dx = x - xi;
+
+        // Y = A(1-w)(1-h) + B(w)(1-h) + C(h)(1-w) + Dwh
+        a = (1-dx)*(1-dy); b = dx*(1-dy);
+        c = dy*(1-dx); d = dx*dy;
+
+        pixel = (yw + xi)<<2;
+
+        A = im[pixel]; B = im[pixel+4];
+        C = im[pixel+w4]; D = im[pixel+w4+4];
+        interpolated[index] = clamp(stdMath.round(A*a +  B*b + C*c  +  D*d), 0, 255);
+
+        A = im[pixel+1]; B = im[pixel+5];
+        C = im[pixel+w4+1]; D = im[pixel+w4+5];
+        interpolated[index+1] = clamp(stdMath.round(A*a +  B*b + C*c  +  D*d), 0, 255);
+
+        A = im[pixel+2]; B = im[pixel+6];
+        C = im[pixel+w4+2]; D = im[pixel+w4+6];
+        interpolated[index+2] = clamp(stdMath.round(A*a +  B*b + C*c  +  D*d), 0, 255);
+
+        A = im[pixel+3]; B = im[pixel+7];
+        C = im[pixel+w4+3]; D = im[pixel+w4+7];
+        interpolated[index+3] = clamp(stdMath.round(A*a +  B*b + C*c  +  D*d), 0, 255);
+    }
+    return interpolated;
+},
+'bicubic': function(im, w, h, nw, nh) {
+    var size = (nw*nh) << 2,
+        interpolated = new ImArray(size),
+        rx = (w-1)/nw, ry = (h-1)/nh,
+        i, j, x, y, xi, yi, pixel, index,
+        rgbaR = 0, rgbaG = 0, rgbaB = 0, rgbaA = 0,
+        rgba0R = 0, rgba0G = 0, rgba0B = 0, rgba0A = 0,
+        rgba1R = 0, rgba1G = 0, rgba1B = 0, rgba1A = 0,
+        rgba2R = 0, rgba2G = 0, rgba2B = 0, rgba2A = 0,
+        rgba3R = 0, rgba3G = 0, rgba3B = 0, rgba3A = 0,
+        yw, dx, dy, dx2, dx3, dy2, dy3, w4 = w << 2,
+        h_1 = h-1, w_1 = w-1,
+        B0, B1, B2, B3,
+        BL0, BL1, BL2, BL3,
+        BR0, BR1, BR2, BR3,
+        BRR0, BRR1, BRR2, BRR3,
+        BB0, BB1, BB2, BB3,
+        BBL0, BBL1, BBL2, BBL3,
+        BBR0, BBR1, BBR2, BBR3,
+        BBRR0, BBRR1, BBRR2, BBRR3,
+        C0, C1, C2, C3,
+        L0, L1, L2, L3,
+        R0, R1, R2, R3,
+        RR0, RR1, RR2, RR3,
+        T0, T1, T2, T3,
+        TL0, TL1, TL2, TL3,
+        TR0, TR1, TR2, TR3,
+        TRR0, TRR1, TRR2, TRR3,
+        p, q, r, s, T_EDGE, B_EDGE, L_EDGE, R_EDGE
+    ;
+    i=0; j=0; x=0; y=0; yi=0; yw=0; dy=dy2=dy3=0;
+    for (index=0; index<size; index+=4,++j,x+=rx)
+    {
+        if (j >= nw) {j=0; x=0; ++i; y+=ry; yi=y|0; dy=y - yi; dy2=dy*dy; dy3=dy2*dy3; yw=yi*w;}
+        xi = x|0; dx = x - xi; dx2 = dx*dx; dx3 = dx2*dx;
+
+        pixel = (yw + xi) << 2;
+        T_EDGE = 0 === yi; B_EDGE = h_1 === yi; L_EDGE = 0 === xi; R_EDGE = w_1 === xi;
+
+        // handle edge cases
+        C0 = im[pixel+0];
+        C1 = im[pixel+1];
+        C2 = im[pixel+2];
+        C3 = im[pixel+3];
+        L0 = L_EDGE ? C0 : im[pixel-4+0];
+        L1 = L_EDGE ? C1 : im[pixel-4+1];
+        L2 = L_EDGE ? C2 : im[pixel-4+2];
+        L3 = L_EDGE ? C3 : im[pixel-4+3];
+        R0 = R_EDGE ? C0 : im[pixel+4+0];
+        R1 = R_EDGE ? C1 : im[pixel+4+1];
+        R2 = R_EDGE ? C2 : im[pixel+4+2];
+        R3 = R_EDGE ? C3 : im[pixel+4+3];
+        RR0 = R_EDGE ? C0 : im[pixel+8+0];
+        RR1 = R_EDGE ? C1 : im[pixel+8+1];
+        RR2 = R_EDGE ? C2 : im[pixel+8+2];
+        RR3 = R_EDGE ? C3 : im[pixel+8+3];
+        B0 = B_EDGE ? C0 : im[pixel+w4+0];
+        B1 = B_EDGE ? C1 : im[pixel+w4+1];
+        B2 = B_EDGE ? C2 : im[pixel+w4+2];
+        B3 = B_EDGE ? C3 : im[pixel+w4+3];
+        BB0 = B_EDGE ? C0 : im[pixel+w4+w4+0];
+        BB1 = B_EDGE ? C1 : im[pixel+w4+w4+1];
+        BB2 = B_EDGE ? C2 : im[pixel+w4+w4+2];
+        BB3 = B_EDGE ? C3 : im[pixel+w4+w4+3];
+        BL0 = B_EDGE||L_EDGE ? C0 : im[pixel+w4-4+0];
+        BL1 = B_EDGE||L_EDGE ? C1 : im[pixel+w4-4+1];
+        BL2 = B_EDGE||L_EDGE ? C2 : im[pixel+w4-4+2];
+        BL3 = B_EDGE||L_EDGE ? C3 : im[pixel+w4-4+3];
+        BR0 = B_EDGE||R_EDGE ? C0 : im[pixel+w4+4+0];
+        BR1 = B_EDGE||R_EDGE ? C1 : im[pixel+w4+4+1];
+        BR2 = B_EDGE||R_EDGE ? C2 : im[pixel+w4+4+2];
+        BR3 = B_EDGE||R_EDGE ? C3 : im[pixel+w4+4+3];
+        BRR0 = B_EDGE||R_EDGE ? C0 : im[pixel+w4+8+0];
+        BRR1 = B_EDGE||R_EDGE ? C1 : im[pixel+w4+8+1];
+        BRR2 = B_EDGE||R_EDGE ? C2 : im[pixel+w4+8+2];
+        BRR3 = B_EDGE||R_EDGE ? C3 : im[pixel+w4+8+3];
+        BBL0 = B_EDGE||L_EDGE ? C0 : im[pixel+w4+w4-4+0];
+        BBL1 = B_EDGE||L_EDGE ? C1 : im[pixel+w4+w4-4+1];
+        BBL2 = B_EDGE||L_EDGE ? C2 : im[pixel+w4+w4-4+2];
+        BBL3 = B_EDGE||L_EDGE ? C3 : im[pixel+w4+w4-4+3];
+        BBR0 = B_EDGE||R_EDGE ? C0 : im[pixel+w4+w4+4+0];
+        BBR1 = B_EDGE||R_EDGE ? C1 : im[pixel+w4+w4+4+1];
+        BBR2 = B_EDGE||R_EDGE ? C2 : im[pixel+w4+w4+4+2];
+        BBR3 = B_EDGE||R_EDGE ? C3 : im[pixel+w4+w4+4+3];
+        BBRR0 = B_EDGE||R_EDGE ? C0 : im[pixel+w4+w4+8+0];
+        BBRR1 = B_EDGE||R_EDGE ? C1 : im[pixel+w4+w4+8+1];
+        BBRR2 = B_EDGE||R_EDGE ? C2 : im[pixel+w4+w4+8+2];
+        BBRR3 = B_EDGE||R_EDGE ? C3 : im[pixel+w4+w4+8+3];
+        T0 = T_EDGE ? C0 : im[pixel-w4+0];
+        T1 = T_EDGE ? C1 : im[pixel-w4+1];
+        T2 = T_EDGE ? C2 : im[pixel-w4+2];
+        T3 = T_EDGE ? C3 : im[pixel-w4+3];
+        TL0 = T_EDGE||L_EDGE ? C0 : im[pixel-w4-4+0];
+        TL1 = T_EDGE||L_EDGE ? C1 : im[pixel-w4-4+1];
+        TL2 = T_EDGE||L_EDGE ? C2 : im[pixel-w4-4+2];
+        TL3 = T_EDGE||L_EDGE ? C3 : im[pixel-w4-4+3];
+        TR0 = T_EDGE||R_EDGE ? C0 : im[pixel-w4+4+0];
+        TR1 = T_EDGE||R_EDGE ? C1 : im[pixel-w4+4+1];
+        TR2 = T_EDGE||R_EDGE ? C2 : im[pixel-w4+4+2];
+        TR3 = T_EDGE||R_EDGE ? C3 : im[pixel-w4+4+3];
+        TRR0 = T_EDGE||R_EDGE ? C0 : im[pixel-w4+8+0];
+        TRR1 = T_EDGE||R_EDGE ? C1 : im[pixel-w4+8+1];
+        TRR2 = T_EDGE||R_EDGE ? C2 : im[pixel-w4+8+2];
+        TRR3 = T_EDGE||R_EDGE ? C3 : im[pixel-w4+8+3];
+
+        p = (TRR0 - TR0) - (TL0 - T0);
+        q = (TL0 - T0) - p;
+        r = TR0 - TL0;
+        s = T0;
+        rgba0R = p * dx3 + q * dx2 + r * dx + s;
+        p = (TRR1 - TR1) - (TL1 - T1);
+        q = (TL1 - T1) - p;
+        r = TR1 - TL1;
+        s = T1;
+        rgba0G = p * dx3 + q * dx2 + r * dx + s;
+        p = (TRR2 - TR2) - (TL2 - T2);
+        q = (TL2 - T2) - p;
+        r = TR2 - TL2;
+        s = T2;
+        rgba0B = p * dx3 + q * dx2 + r * dx + s;
+        p = (TRR3 - TR3) - (TL3 - T3);
+        q = (TL3 - T3) - p;
+        r = TR3 - TL3;
+        s = T3;
+        rgba0A = p * dx3 + q * dx2 + r * dx + s;
+
+        p = (RR0 - R0) - (L0 - C0);
+        q = (L0 - C0) - p;
+        r = R0 - L0;
+        s = C0;
+        rgba1R = p * dx3 + q * dx2 + r * dx + s;
+        p = (RR1 - R1) - (L1 - C1);
+        q = (L1 - C1) - p;
+        r = R1 - L1;
+        s = C1;
+        rgba1G = p * dx3 + q * dx2 + r * dx + s;
+        p = (RR2 - R2) - (L2 - C2);
+        q = (L2 - C2) - p;
+        r = R2 - L2;
+        s = C2;
+        rgba1B = p * dx3 + q * dx2 + r * dx + s;
+        p = (RR3 - R3) - (L3 - C3);
+        q = (L3 - C3) - p;
+        r = R3 - L3;
+        s = C3;
+        rgba1A = p * dx3 + q * dx2 + r * dx + s;
+
+        p = (BRR0 - BR0) - (BL0 - B0);
+        q = (BL0 - B0) - p;
+        r = BR0 - BL0;
+        s = B0;
+        rgba2R = p * dx3 + q * dx2 + r * dx + s;
+        p = (BRR1 - BR1) - (BL1 - B1);
+        q = (BL1 - B1) - p;
+        r = BR1 - BL1;
+        s = B1;
+        rgba2G = p * dx3 + q * dx2 + r * dx + s;
+        p = (BRR2 - BR2) - (BL2 - B2);
+        q = (BL2 - B2) - p;
+        r = BR2 - BL2;
+        s = B2;
+        rgba2B = p * dx3 + q * dx2 + r * dx + s;
+        p = (BRR3 - BR3) - (BL3 - B3);
+        q = (BL3 - B3) - p;
+        r = BR3 - BL3;
+        s = B3;
+        rgba2A = p * dx3 + q * dx2 + r * dx + s;
+
+        p = (BBRR0 - BBR0) - (BBL0 - BB0);
+        q = (BBL0 - BB0) - p;
+        r = BBR0 - BBL0;
+        s = BB0;
+        rgba3R = p * dx3 + q * dx2 + r * dx + s;
+        p = (BBRR1 - BBR1) - (BBL1 - BB1);
+        q = (BBL1 - BB1) - p;
+        r = BBR1 - BBL1;
+        s = BB1;
+        rgba3G = p * dx3 + q * dx2 + r * dx + s;
+        p = (BBRR2 - BBR2) - (BBL2 - BB2);
+        q = (BBL2 - BB2) - p;
+        r = BBR2 - BBL2;
+        s = BB2;
+        rgba3B = p * dx3 + q * dx2 + r * dx + s;
+        p = (BBRR3 - BBR3) - (BBL3 - BB3);
+        q = (BBL3 - BB3) - p;
+        r = BBR3 - BBL3;
+        s = BB3;
+        rgba3A = p * dx3 + q * dx2 + r * dx + s;
+
+        // Then we interpolate those 4 pixels to get a single pixel that is a composite of 4 * 4 pixels, 16 pixels
+        p = (rgba3R - rgba2R) - (rgba0R - rgba1R);
+        q = (rgba0R - rgba1R) - p;
+        r = rgba2R - rgba0R;
+        s = rgba1R;
+        rgbaR = clamp(stdMath.round(p * dy3 + q * dy2 + r * dy + s), 0, 255);
+        p = (rgba3G - rgba2G) - (rgba0G - rgba1G);
+        q = (rgba0G - rgba1G) - p;
+        r = rgba2G - rgba0G;
+        s = rgba1G;
+        rgbaG = clamp(stdMath.round(p * dy3 + q * dy2 + r * dy + s), 0, 255);
+        p = (rgba3B - rgba2B) - (rgba0B - rgba1B);
+        q = (rgba0B - rgba1B) - p;
+        r = rgba2B - rgba0B;
+        s = rgba1B;
+        rgbaB = clamp(stdMath.round(p * dy3 + q * dy2 + r * dy + s), 0, 255);
+        p = (rgba3A - rgba2A) - (rgba0A - rgba1A);
+        q = (rgba0A - rgba1A) - p;
+        r = rgba2A - rgba0A;
+        s = rgba1A;
+        rgbaA = clamp(stdMath.round(p * dy3 + q * dy2 + r * dy + s), 0, 255);
+
+        interpolated[index]      = rgbaR;
+        interpolated[index+1]    = rgbaG;
+        interpolated[index+2]    = rgbaB;
+        interpolated[index+3]    = rgbaA;
+    }
+    return interpolated;
+}
+};
 function Path2D(transform)
 {
     transform = transform || Matrix2D.EYE();
