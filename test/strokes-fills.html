@@ -361,8 +361,8 @@ function drawArcs(sx, sy, angle)
     canvas1.style.height = String(h)+'px';
     canvas2.style.width = String(w)+'px';
     canvas2.style.height = String(h)+'px';
-    test1.appendChild(text('Transformed Arc ('+sx+','+sy+','+angle+')'));
-    test2.appendChild(text('Transformed Arc ('+sx+','+sy+','+angle+')'));
+    test1.appendChild(text('Transformed Arc ('+sx+','+sy+')'));
+    test2.appendChild(text('Transformed Arc ('+sx+','+sy+')'));
     test1.appendChild(canvas1);
     test2.appendChild(canvas2);
 
@@ -374,7 +374,7 @@ function drawArcs(sx, sy, angle)
     ctx1.lineWidth = 4;
     ctx1.translate(100, 100);
     ctx1.scale(sx, sy);
-    ctx1.rotate(angle);
+    //ctx1.rotate(angle);
     ctx1.translate(-100, -100);
     ctx1.arc(100, 100, 20, 0, 3*Math.PI/2, false);
     ctx1.stroke();
@@ -387,7 +387,7 @@ function drawArcs(sx, sy, angle)
     ctx.lineWidth = 4;
     ctx.translate(100, 100);
     ctx.scale(sx, sy);
-    ctx.rotate(angle);
+    //ctx.rotate(angle);
     ctx.translate(-100, -100);
     ctx.arc(100, 100, 20, 0, 3*Math.PI/2, false, 1);
     ctx.stroke();

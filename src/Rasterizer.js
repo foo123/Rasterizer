@@ -24,15 +24,16 @@ var def = Object.defineProperty, PROTO = 'prototype',
     is_nan = isNaN, is_finite = isFinite,
     PI = stdMath.PI, TWO_PI = 2*PI, HALF_PI = PI/2,
     NUM_POINTS = 6, MIN_LEN = sqrt2, PIXEL_SIZE = 0.5,
-    ImArray = 'undefined' !== typeof Uint8ClampedArray ? Uint8ClampedArray : ('undefined' !== typeof Uint8Array ? Uint8Array : Array);
+    ImArray = 'undefined' !== typeof Uint8ClampedArray ? Uint8ClampedArray : ('undefined' !== typeof Uint8Array ? Uint8Array : Array),
+    BLANK = [0, 0, 0, 0];
 
 function Rasterizer(width, height, set_rgba_at, get_rgba_from)
 {
-    var self = this;
+    var self = this, ctx2D;
     if (!(self instanceof Rasterizer)) return new Rasterizer(width, height, set_rgba_at, get_rgba_from);
 
-    get_rgba_from = get_rgba_from || (set_rgba_at && set_rgba_at.$imgData ? Rasterizer.getRGBAFrom(set_rgba_at.$imgData) : function(x, y) {return [0,0,0,0];});
-    var ctx2d = new RenderingContext2D(width, height, set_rgba_at, get_rgba_from);
+    get_rgba_from = get_rgba_from || (set_rgba_at && set_rgba_at.$target ? Rasterizer.getRGBAFrom(set_rgba_at.$target) : function(x, y) {return BLANK;});
+    ctx2D = new RenderingContext2D(width, height, set_rgba_at, get_rgba_from);
 
     def(self, 'width', {
         get: function() {
@@ -49,7 +50,7 @@ function Rasterizer(width, height, set_rgba_at, get_rgba_from)
         }
     });
     self.getContext = function(type) {
-        if ('2d' === type) return ctx2d;
+        if ('2d' === type) return ctx2D;
         err('Unsupported context "'+type+'"');
     };
 }
@@ -60,18 +61,18 @@ Rasterizer[PROTO] = {
     height: null,
     getContext: null
 };
-Rasterizer.getRGBAFrom = function(RGBA) {
-    if ('function' === typeof RGBA)
+Rasterizer.getRGBAFrom = function(source) {
+    if ('function' === typeof source)
     {
         return function(x, y) {
-            var c = RGBA(x, y);
+            var c = source(x, y);
             return [c[0], c[1], c[2], 3 < c.length ? c[3]/255 : 1.0];
         };
     }
-    else if (RGBA.data && null != RGBA.width && null != RGBA.height)
+    else if (source.data && null != source.width && null != source.height)
     {
         return function(x, y) {
-            var w = RGAB.width, h = RGAB.height, data = RGBA.data, index;
+            var w = source.width, h = source.height, data = source.data, index;
             if (0 <= x && x < w && 0 <= y && y < h)
             {
                 index = (x + w*y) << 2;
@@ -82,47 +83,58 @@ Rasterizer.getRGBAFrom = function(RGBA) {
                     data[index+3]/255
                 ];
             }
-            return [0,0,0,0];
+            return BLANK;
         };
     }
     else
     {
-        var c = [RGBA[0], RGBA[1], RGBA[2], 3 < RGBA.length ? RGBA[3] : 1.0];
+        var c = [source[0] || 0, source[1] || 0, source[2] || 0, 3 < source.length ? (source[3] || 0) : 1.0];
         return function(x, y) {
             return c;
         };
     }
 };
-Rasterizer.setRGBATo = function(IMG) {
-    if ('function' === typeof IMG)
+Rasterizer.setRGBATo = function(target) {
+    if ('function' === typeof target)
     {
-        return IMG;
+        return target;
     }
     else
     {
-        var width = IMG.width, height = IMG.height, data = IMG.data;
         var setter = function(x, y, r, g, b, af, op) {
-            if (0 <= x && x < width && 0 <= y && y < height /*&& 0 < af*/)
+            var w = target.width, h = target.height, data = target.data;
+            if (0 <= x && x < w && 0 <= y && y < h /*&& 0 < af*/)
             {
-                var index = (x + width*y) << 2,
+                var index = (x + w*y) << 2,
                     r0 = data[index  ] || 0,
                     g0 = data[index+1] || 0,
                     b0 = data[index+2] || 0,
                     a0 = (data[index+3] || 0)/255,
-                    a1 = af, f,
+                    a1 = af, f = null,
                     ro = 0, go = 0,
                     bo = 0, ao = 0;
                 op = op || 'source-over';
-                f = RenderingContext2D.CompositionMode[op];
-                if (!f)
+                if ('clear' !== op && 'copy' !== op)
                 {
-                    op = 'source-over';
                     f = RenderingContext2D.CompositionMode[op];
+                    if (!f)
+                    {
+                        op = 'source-over';
+                        f = RenderingContext2D.CompositionMode[op];
+                    }
                 }
                 switch(op)
                 {
                     case 'clear':
+                        f = null;
+                    break;
                     case 'copy':
+                        ro = r;
+                        go = g;
+                        bo = b;
+                        ao = clamp(stdMath.round(255*a1), 0, 255);
+                        f = null;
+                    break;
                     case 'xor':
                     case 'destination-out':
                     case 'destination-in':
@@ -140,19 +152,22 @@ Rasterizer.setRGBATo = function(IMG) {
                         ao = a1 + a0 - a1*a0;
                     break;
                 }
-                if (0 < ao)
+                if (f)
                 {
-                    ro = clamp(stdMath.round(255*f(a0*r0/255, a0, a1*r/255, a1)/ao), 0, 255);
-                    go = clamp(stdMath.round(255*f(a0*g0/255, a0, a1*g/255, a1)/ao), 0, 255);
-                    bo = clamp(stdMath.round(255*f(a0*b0/255, a0, a1*b/255, a1)/ao), 0, 255);
-                    ao = clamp(stdMath.round(255*ao), 0, 255);
-                }
-                else
-                {
-                    ro = 0;
-                    go = 0;
-                    bo = 0;
-                    ao = 0;
+                    if (0 < ao)
+                    {
+                        ro = clamp(stdMath.round(255*f(a0*r0/255, a0, a1*r/255, a1)/ao), 0, 255);
+                        go = clamp(stdMath.round(255*f(a0*g0/255, a0, a1*g/255, a1)/ao), 0, 255);
+                        bo = clamp(stdMath.round(255*f(a0*b0/255, a0, a1*b/255, a1)/ao), 0, 255);
+                        ao = clamp(stdMath.round(255*ao), 0, 255);
+                    }
+                    else
+                    {
+                        ro = 0;
+                        go = 0;
+                        bo = 0;
+                        ao = 0;
+                    }
                 }
                 data[index  ] = ro;
                 data[index+1] = go;
@@ -160,7 +175,7 @@ Rasterizer.setRGBATo = function(IMG) {
                 data[index+3] = ao;
             }
         };
-        setter.$imgData = IMG;
+        setter.$target = target;
         return setter;
     }
 };
@@ -170,8 +185,8 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
     var self = this, get_stroke_at, get_fill_at,
         canvas = null, clip_canvas = null,
         canvas_reset, canvas_output, stack,
-        mult = 1, reset, fill,
-        set_pixel, stroke_pixel, fill_pixel,
+        reset, fill, set_pixel,
+        stroke_pixel, fill_pixel,
         get_data, set_data,
         lineCap, lineJoin, miterLimit,
         lineWidth, lineDash, lineDashOffset,
@@ -195,16 +210,16 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
             var idx = String(x)+','+String(y)/*String(x + y*width)*/,
                 j = canvas[idx] || 0,
                 m = clip_canvas ? (clip_canvas[idx] || 0) : 1;
-            i *= mult*alpha*m;
+            i *= alpha*m;
             if (i > j) canvas[idx] = i;
         }
     };
     stroke_pixel = function stroke_pixel(x, y, i) {
-        var c = 'clear' === op ? [0,0,0,0] : get_stroke_at(x, y), af = 3 < c.length ? c[3] : 1.0;
+        var c = 'clear' === op ? BLANK : get_stroke_at(x, y), af = 3 < c.length ? c[3] : 1.0;
         set_rgba_at(x, y, c[0], c[1], c[2], af*i, op);
     };
     fill_pixel = function fill_pixel(x, y, i) {
-        var c = 'clear' === op ? [0,0,0,0] : get_fill_at(x, y), af = 3 < c.length ? c[3] : 1.0;
+        var c = 'clear' === op ? BLANK : get_fill_at(x, y), af = 3 < c.length ? c[3] : 1.0;
         set_rgba_at(x, y, c[0], c[1], c[2], af*i, op);
     };
     reset = function(init) {
@@ -368,7 +383,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         lineWidth = state[6];
         lineDash = state[7];
         lineDashOffset = state[8];
-        currentPath._t = transform = state[9];
+        currentPath.transform = transform = state[9];
         alpha = state[10];
         op = state[11];
     };
@@ -377,16 +392,16 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
     };
 
     self.scale = function(sx, sy) {
-        currentPath._t = transform = transform.mul(Matrix2D.scale(sx, sy));
+        currentPath.transform = transform = transform.mul(Matrix2D.scale(sx, sy));
     };
     self.rotate = function(angle) {
-        currentPath._t = transform = transform.mul(Matrix2D.rotate(angle || 0));
+        currentPath.transform = transform = transform.mul(Matrix2D.rotate(angle || 0));
     };
     self.translate = function(tx, ty) {
-        currentPath._t = transform = transform.mul(Matrix2D.translate(tx || 0, ty || 0));
+        currentPath.transform = transform = transform.mul(Matrix2D.translate(tx || 0, ty || 0));
     };
     self.transform = function(a, b, c, d, e, f) {
-        currentPath._t = transform = transform.mul(new Matrix2D(a, c, e, b, d, f));
+        currentPath.transform = transform = transform.mul(new Matrix2D(a, c, e, b, d, f));
     };
     self.getTransform = function() {
         return transform.clone();
@@ -400,10 +415,10 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         {
             transform = new Matrix2D(a.a, a.c, a.e, a.b, a.d, a.f);
         }
-        currentPath._t = transform;
+        currentPath.transform = transform;
     };
     self.resetTransform = function() {
-        currentPath._t = transform = Matrix2D.EYE();
+        currentPath.transform = transform = Matrix2D.EYE();
     };
 
     self.beginPath = function() {
@@ -457,25 +472,22 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         if (0 < lineWidth)
         {
             path = path || currentPath;
-            var m = mult;
-            if (1 > lineWidth) mult = lineWidth;
+            var t = path.transform,
+                sx = hypot(t.m11, t.m21),
+                sy = hypot(-t.m12, t.m22);
             canvas_reset();
-            stroke_path(set_pixel, path, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, 0, 0, width - 1, height - 1);
+            stroke_path(set_pixel, path, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, sx, sy, 0, 0, width - 1, height - 1);
             canvas_output(stroke_pixel);
-            mult = m;
         }
     };
     fill = function(path, fillRule) {
-        var m = mult,
-            lw = 0.5/*0.65*/,
+        var lw = 0.5/*0.65*/,
             xmin = 0,
             ymin = 0,
             xmax = width - 1,
             ymax = height - 1;
         // stroke thin path outline
-        if (1 > lw) mult = lw;
-        stroke_path(set_pixel, path, lw, [], 0, 'butt', 'bevel', 0, xmin, ymin, xmax, ymax);
-        mult = m;
+        stroke_path(set_pixel, path, lw, [], 0, 'butt', 'bevel', 0, 1, 1, xmin, ymin, xmax, ymax);
         // fill path interior
         fill_path(set_pixel, path, fillRule, xmin, ymin, xmax, ymax);
     };
@@ -586,7 +598,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
     };
     set_data = function(D, W, H, d, w, h, x0, y0, x1, y1, X0, Y0) {
         var i, I, x, y;
-        //if ( !D.length || !d.length || !w || !h || !W || !H ) return D;
+        //if (!D.length || !d.length || !w || !h || !W || !H) return;
         x0 = stdMath.min(x0, w-1); y0 = stdMath.min(y0, h-1);
         X0 = stdMath.min(X0, W-1); Y0 = stdMath.min(Y0, H-1);
         x1 = stdMath.min(x1, w-1); y1 = stdMath.min(y1, h-1);
@@ -603,15 +615,16 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
             D[I+3] = d[i+3];*/
             set_rgba_at(x+X0, y+Y0, d[i  ], d[i+1], d[i+2], d[i+3]/255, 'copy');
         }
-        return D;
     };
     self.drawImage = function(imgData, sx, sy, sw, sh, dx, dy, dw, dh) {
+        if (!imgData || !imgData.data) err('Invalid image data in drawImage');
         var W = width, H = height,
             w = imgData.width, h = imgData.height,
             idata = imgData.data,
-            argslen = arguments.length,
-            resize = RenderingContext2D.Interpolation.bilinear
+            resize = RenderingContext2D.Interpolation.bilinear,
+            argslen = arguments.length
         ;
+        if (!w || !h) err('Invalid image data in drawImage');
         sx = sx || 0;
         sy = sy || 0;
         if (3 === argslen)
@@ -648,11 +661,12 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         y2 = stdMath.min(y1+h-1, h-1, H-1);
         return {data: get_data(null, W, H, x1, y1, x2, y2), width: x2-x1+1, height: y2-y1+1};
     };
-    self.putImageData = function(data, x, y) {
-        var W = width, H = height, w = data.width, h = data.height;
+    self.putImageData = function(imgData, x, y) {
+        if (!imgData || !imgData.data) err('Invalid image data in putImageData');
+        var W = width, H = height, w = imgData.width, h = imgData.height;
         if (null == x) x = 0;
         if (null == y) y = 0;
-        set_data(null, W, H, data.data, w, h, 0, 0, w-1, h-1, x, y);
+        set_data(null, W, H, imgData.data, w, h, 0, 0, w-1, h-1, x, y);
     };
 
     reset(true);
@@ -745,8 +759,8 @@ A atop B aB 1-aA
 B atop A 1-aB aA
 A xor B l-aB 1-aA
 */
-'clear': function(Dca, Da, Sca, Sa){return 0;},
-'copy': function(Dca, Da, Sca, Sa){return Sca;},
+/*'clear': function(Dca, Da, Sca, Sa){return 0;},
+'copy': function(Dca, Da, Sca, Sa){return Sca;},*/
 'xor': function(Dca, Da, Sca, Sa){return Sca * (1 - Da) + Dca * (1 - Sa);},
 'destination-out': function(Dca, Da, Sca, Sa){return Dca * (1 - Sa);},
 'destination-in': function(Dca, Da, Sca, Sa){return Dca * Sa;},
@@ -777,7 +791,7 @@ RenderingContext2D.CompositionMode['hardlight'] = RenderingContext2D.Composition
 RenderingContext2D.CompositionMode['softlight'] = RenderingContext2D.CompositionMode['soft-light'];
 
 RenderingContext2D.Interpolation = {
-'nearest': function(im, w, h, nw, nh) {
+/*'nearest': function(im, w, h, nw, nh) {
     // http://pixinsight.com/doc/docs/InterpolationAlgorithms/InterpolationAlgorithms.html
     var size = (nw*nh) << 2,
         interpolated = new ImArray(size),
@@ -800,7 +814,7 @@ RenderingContext2D.Interpolation = {
         interpolated[index+3]    = im[pixel+3];
     }
     return interpolated;
-},
+},*/
 'bilinear': function(im, w, h, nw, nh) {
     // http://pixinsight.com/doc/docs/InterpolationAlgorithms/InterpolationAlgorithms.html
     // http://tech-algorithm.com/articles/bilinear-image-scaling/
@@ -841,7 +855,7 @@ RenderingContext2D.Interpolation = {
         interpolated[index+3] = clamp(stdMath.round(A*a +  B*b + C*c  +  D*d), 0, 255);
     }
     return interpolated;
-},
+}/*,
 'bicubic': function(im, w, h, nw, nh) {
     var size = (nw*nh) << 2,
         interpolated = new ImArray(size),
@@ -1059,19 +1073,19 @@ RenderingContext2D.Interpolation = {
         interpolated[index+3]    = rgbaA;
     }
     return interpolated;
-}
+}*/
 };
 function Path2D(transform)
 {
     transform = transform || Matrix2D.EYE();
     var self = this, need_new_subpath = true, d = [], sd = null;
 
-    def(self, '_t', {
+    def(self, 'transform', {
         get: function() {
             return transform.clone();
         },
-        set: function(_t) {
-            transform = _t;
+        set: function(t) {
+            transform = t;
         }
     });
     def(self, '_d', {
@@ -1228,11 +1242,7 @@ function Path2D(transform)
                 p.push(t[0], t[1]);
             },
             arc = function(p, x0, y0, x1, y1, x2, y2, r) {
-                var t0 = transform.transform(x0, y0),
-                    t1 = transform.transform(x1, y1),
-                    t2 = transform.transform(x2, y2),
-                    tr = transform.transform(r, 0);
-                p.push.apply(p, arc2_points(t0[0], t0[1], t1[0], t1[1], t2[0], t2[1], hypot(tr[0] - o[0], tr[1] - o[1])));
+                p.push.apply(p, arc2_points(x0, y0, x1, y1, x2, y2, r, transform));
             };
         p = [];
         point(p, x + upperLeft, y);
@@ -1296,25 +1306,20 @@ function Path2D(transform)
         return self;
     };
     self.arcTo = function(x1, y1, x2, y2, r) {
-        if (0 > r) err('Negative radius in arcTo');
         var p = handle([
             x1, y1,
-            x2, y2
-        ], transform);
+            x2, y2,
+            r
+        ]), p0;
         if (!p) return self;
+        if (0 > r) err('Negative radius in arcTo');
         if (need_new_subpath)
         {
-            d.push([p[0], p[1]]);
+            d.push(transform.transform(p[0], p[1]));
             need_new_subpath = false;
         }
-        var o = transform.transform(0, 0), x0 = transform.transform(r, 0);
-        p = arc2_points(
-            +d[d.length-1][d[d.length-1].length-2],
-            d[d.length-1][d[d.length-1].length-1],
-            p[0], p[1],
-            p[2], p[3],
-            hypot(x0[0] - o[0], x0[1] - o[1])
-        );
+        p0 = transform.inv().transform(+d[d.length-1][d[d.length-1].length-2], d[d.length-1][d[d.length-1].length-1]);
+        p = arc2_points(p0[0], p0[1], p[0], p[1], p[2], p[3], r, transform);
         p[0] = new Marker(+p[0], {type:'arc', lineCap:true, lineJoin:'bevel'});
         p[p.length-2] = new Marker(+p[p.length-2], {type:'arc', lineCap:true, lineJoin:true});
         d[d.length-1].push.apply(d[d.length-1], p);
@@ -1660,11 +1665,11 @@ function handle(coords, transform)
     }
     return coords;
 }
-function stroke_polyline(set_pixel, points, lw, ld, ldo, lc, lj, ml, xmin, ymin, xmax, ymax)
+function stroke_polyline(set_pixel, points, lw, ld, ldo, lc, lj, ml, sx, sy, xmin, ymin, xmax, ymax)
 {
     var n = points.length, i,
         x1, y1, x2, y2, xp, yp,
-        dx1, dy1, dx2, dy2, w1, w2, lw2 = (lw-1)/2, mlw, ljj = lj, lcc = lc;
+        dx1, dy1, dx2, dy2, w1, w2, ljj = lj, lcc = lc;
     if (n < 6)
     {
         x1 = points[0];
@@ -1673,13 +1678,12 @@ function stroke_polyline(set_pixel, points, lw, ld, ldo, lc, lj, ml, xmin, ymin,
         y2 = points[3];
         dx2 = stdMath.abs(x2 - x1);
         dy2 = stdMath.abs(y2 - y1);
-        w2 = ww(lw, dx2, dy2);
-        stroke_line(set_pixel, x1, y1, x2, y2, dx2, dy2, w2[0], w2[1], lc, lc, lw2, xmin, ymin, xmax, ymax);
+        w2 = ww(lw, dx2, dy2, sx, sy);
+        stroke_line(set_pixel, x1, y1, x2, y2, dx2, dy2, w2[0], w2[1], lc, lc, lw, xmin, ymin, xmax, ymax);
     }
     else
     {
         n -= 2;
-        mlw = ml*lw/2;
         for (i=0; i<n; i+=2)
         {
             x1 = points[i];
@@ -1688,13 +1692,13 @@ function stroke_polyline(set_pixel, points, lw, ld, ldo, lc, lj, ml, xmin, ymin,
             y2 = points[i+3];
             dx2 = stdMath.abs(x2 - x1);
             dy2 = stdMath.abs(y2 - y1);
-            w2 = ww(lw, dx2, dy2);
+            w2 = ww(lw, dx2, dy2, sx, sy);
             if (x1.params && x1.params.lineCap) lcc = true === x1.params.lineCap ? lc : x1.params.lineCap;
-            stroke_line(set_pixel, x1, y1, x2, y2, dx2, dy2, w2[0], w2[1], 0 === i ? lcc : null, n === i+2 ? lcc : null, lw2, xmin, ymin, xmax, ymax);
-            if (1 < lw && 0 < i)
+            stroke_line(set_pixel, x1, y1, x2, y2, dx2, dy2, w2[0], w2[1], 0 === i ? lcc : null, n === i+2 ? lcc : null, lw, xmin, ymin, xmax, ymax);
+            if (0 < i && (0 < w1[0] || 0 < w1[1] || 0 < w2[0] || 0 < w2[1]))
             {
                 if (x1.params && x1.params.lineJoin) ljj = true === x1.params.lineJoin ? lj : x1.params.lineJoin;
-                join_lines(set_pixel, xp, yp, x1, y1, x2, y2, dx1, dy1, w1[0], w1[1], dx2, dy2, w2[0], w2[1], ljj, lw2, mlw, xmin, ymin, xmax, ymax);
+                join_lines(set_pixel, xp, yp, x1, y1, x2, y2, dx1, dy1, w1[0], w1[1], dx2, dy2, w2[0], w2[1], ljj, ml, xmin, ymin, xmax, ymax);
             }
             xp = x1;
             yp = y1;
@@ -1704,36 +1708,40 @@ function stroke_polyline(set_pixel, points, lw, ld, ldo, lc, lj, ml, xmin, ymin,
         }
     }
 }
-function stroke_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, lw2, xmin, ymin, xmax, ymax)
+function stroke_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, lw, xmin, ymin, xmax, ymax)
 {
     if (0 === wx && 0 === wy)
     {
-        wu_line(set_pixel, x1, y1, x2, y2, dx, dy, xmin, ymin, xmax, ymax, true, true);
+        wu_line(set_pixel, x1, y1, x2, y2, dx, dy, lw, xmin, ymin, xmax, ymax, true, true);
     }
     else
     {
-        wu_thick_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, lw2, xmin, ymin, xmax, ymax);
+        wu_thick_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, lw, xmin, ymin, xmax, ymax);
     }
 }
-function ww(w, dx, dy)
+function ww(w, dx, dy, sx, sy)
 {
-    if (1 >= w)
+    var wxy, n, w2;
+    /*if (1 >= w)
     {
-        return [0, 0];
+        wxy = [0, 0];
     }
-    else if (is_strictly_equal(dx, 0))
+    else*/ if (is_strictly_equal(dx, 0))
     {
-        return [(w-1)/2, 0];
+        wxy = [sx*(w/*-1*/)/2, 0];
     }
     else if (is_strictly_equal(dy, 0))
     {
-        return [0, (w-1)/2];
+        wxy = [0, sy*(w/*-1*/)/2];
     }
     else
     {
-        var n = hypot(dx, dy), w2 = (w-1)/2;
-        return [dy*w2/n, dx*w2/n];
+        n = hypot(dx, dy);
+        w2 = (w/*-1*/)/2;
+        wxy = [sx*dy*w2/n, sy*dx*w2/n];
     }
+    if (1 > wxy[0] && 1 > wxy[1]) wxy = [0, 0];
+    return wxy;
 }
 function clip(x1, y1, x2, y2, xmin, ymin, xmax, ymax)
 {
@@ -1950,7 +1958,7 @@ function fill_sector(set_pixel, ax, ay, bx, by, px, py, r, xmin, ymin, xmax, yma
     p = arc_points(cx, cy, r, r, 0, ta, tb, ccw);
     m = p.length - 2;
     // outline of sector
-    for (i=0; i<m; i+=2) wu_line(set_pixel, p[i], p[i+1], p[i+2], p[i+3], null, null, xmin, ymin, xmax, ymax);
+    for (i=0; i<m; i+=2) wu_line(set_pixel, p[i], p[i+1], p[i+2], p[i+3], null, null, 1, xmin, ymin, xmax, ymax);
     p = path_to_segments([p]).sort(asc);
     y = stdMath.round(stdMath.min(ay, by, py, p.ymin));
     yy = stdMath.round(stdMath.max(ay, by, py, p.ymax));
@@ -2022,7 +2030,7 @@ function fill_sector(set_pixel, ax, ay, bx, by, px, py, r, xmin, ymin, xmax, yma
         for (; x<=xx; ++x) set_pixel(x, y, 1);
     }
 }
-function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, xmin, ymin, xmax, ymax, gs, ge)
+function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, lw, xmin, ymin, xmax, ymax, gs, ge)
 {
     var xm = stdMath.min(xs, xe), xM = stdMath.max(xs, xe),
         ym = stdMath.min(ys, ye), yM = stdMath.max(ys, ye);
@@ -2064,7 +2072,8 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, xmin, ymin, xmax, ymax, gs, 
         rfpart = 0,
         gap = 0,
         e = 0.5,
-        steep = dy > dx;
+        steep = dy > dx,
+        mult = 1 > lw ? lw : 1;
 
     if (steep)
     {
@@ -2100,13 +2109,13 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, xmin, ymin, xmax, ymax, gs, 
     rfpart = 1 - fpart;
     if (steep)
     {
-        set_pixel(y1, x1, rfpart*gap);
-        set_pixel(y1 + 1, x1, fpart*gap);
+        set_pixel(y1, x1, mult*rfpart*gap);
+        set_pixel(y1 + 1, x1, mult*fpart*gap);
     }
     else
     {
-        set_pixel(x1, y1, rfpart*gap);
-        set_pixel(x1, y1 + 1, fpart*gap);
+        set_pixel(x1, y1, mult*rfpart*gap);
+        set_pixel(x1, y1 + 1, mult*fpart*gap);
     }
 
     intersect = yend + gradient;
@@ -2121,13 +2130,13 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, xmin, ymin, xmax, ymax, gs, 
     rfpart = 1 - fpart;
     if (steep)
     {
-        set_pixel(y2, x2, rfpart*gap);
-        set_pixel(y2 + 1, x2, fpart*gap);
+        set_pixel(y2, x2, mult*rfpart*gap);
+        set_pixel(y2 + 1, x2, mult*fpart*gap);
     }
     else
     {
-        set_pixel(x2, y2, rfpart*gap);
-        set_pixel(x2, y2 + 1, fpart*gap);
+        set_pixel(x2, y2, mult*rfpart*gap);
+        set_pixel(x2, y2 + 1, mult*fpart*gap);
     }
 
     // main loop
@@ -2138,8 +2147,8 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, xmin, ymin, xmax, ymax, gs, 
             y = stdMath.floor(intersect);
             fpart = intersect - y;
             rfpart = 1 - fpart;
-            if (0 < rfpart) set_pixel(y, x, rfpart);
-            if (0 < fpart) set_pixel(y + 1, x, fpart);
+            if (0 < rfpart) set_pixel(y, x, mult*rfpart);
+            if (0 < fpart) set_pixel(y + 1, x, mult*fpart);
             intersect += gradient;
         }
     }
@@ -2150,13 +2159,13 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, xmin, ymin, xmax, ymax, gs, 
             y = stdMath.floor(intersect);
             fpart = intersect - y;
             rfpart = 1 - fpart;
-            if (0 < rfpart) set_pixel(x, y, rfpart);
-            if (0 < fpart) set_pixel(x, y + 1, fpart);
+            if (0 < rfpart) set_pixel(x, y, mult*rfpart);
+            if (0 < fpart) set_pixel(x, y + 1, mult*fpart);
             intersect += gradient;
         }
     }
 }
-function wu_thick_line(set_pixel, xs, ys, xe, ye, dx, dy, wx, wy, cs, ce, lw2, xmin, ymin, xmax, ymax)
+function wu_thick_line(set_pixel, xs, ys, xe, ye, dx, dy, wx, wy, cs, ce, lw, xmin, ymin, xmax, ymax)
 {
     var t, sx, sy,
         wsx, wsy,
@@ -2185,11 +2194,11 @@ function wu_thick_line(set_pixel, xs, ys, xe, ye, dx, dy, wx, wy, cs, ce, lw2, x
         if ('square' === ce) ye += sy*wx;
         if ('round' === cs)
         {
-            fill_sector(set_pixel, xs-wx, ys, xs+wx, ys, xs, ys-sy*wx, lw2, xmin, ymin, xmax, ymax);
+            fill_sector(set_pixel, xs-wx, ys, xs+wx, ys, xs, ys-sy*wx, wx, xmin, ymin, xmax, ymax);
         }
         if ('round' === ce)
         {
-            fill_sector(set_pixel, xe-wx, ye, xe+wx, ye, xe, ye+sy*wx, lw2, xmin, ymin, xmax, ymax);
+            fill_sector(set_pixel, xe-wx, ye, xe+wx, ye, xe, ye+sy*wx, wx, xmin, ymin, xmax, ymax);
         }
         return fill_rect(set_pixel, stdMath.round(xs - wx), stdMath.round(ys), stdMath.round(xs + wx), stdMath.round(ye), xmin, ymin, xmax, ymax);
     }
@@ -2199,11 +2208,11 @@ function wu_thick_line(set_pixel, xs, ys, xe, ye, dx, dy, wx, wy, cs, ce, lw2, x
         if ('square' === ce) xe += sx*wy;
         if ('round' === cs)
         {
-            fill_sector(set_pixel, xs, ys-wy, xs, ys+wy, xs-wy, ys, lw2, xmin, ymin, xmax, ymax);
+            fill_sector(set_pixel, xs, ys-wy, xs, ys+wy, xs-wy, ys, wy, xmin, ymin, xmax, ymax);
         }
         if ('round' === ce)
         {
-            fill_sector(set_pixel, xe, ye-wy, xe, ye+wy, xe+wy, ye, lw2, xmin, ymin, xmax, ymax);
+            fill_sector(set_pixel, xe, ye-wy, xe, ye+wy, xe+wy, ye, wy, xmin, ymin, xmax, ymax);
         }
         return fill_rect(set_pixel, stdMath.round(xs), stdMath.round(ys - wy), stdMath.round(xe), stdMath.round(ys + wy), xmin, ymin, xmax, ymax);
     }
@@ -2242,38 +2251,39 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
     xd = xe + wsx;
     yd = ye - wsy;
 
+    lw = hypot(wx, wy);
     // outline
     if ('round' === cs)
     {
-        fill_sector(set_pixel, xa, ya, xb, yb, (xa-sx*wy+xb-sx*wy)/2, (ya-sy*wx+yb-sy*wx)/2, lw2, xmin, ymin, xmax, ymax)
+        fill_sector(set_pixel, xa, ya, xb, yb, (xa-sx*wy+xb-sx*wy)/2, (ya-sy*wx+yb-sy*wx)/2, lw, xmin, ymin, xmax, ymax)
     }
     else
     {
-        wu_line(set_pixel, xa, ya, xb, yb, null, null, xmin, ymin, xmax, ymax);
+        wu_line(set_pixel, xa, ya, xb, yb, null, null, 1, xmin, ymin, xmax, ymax);
     }
-    wu_line(set_pixel, xb, yb, xd, yd, null, null, xmin, ymin, xmax, ymax);
+    wu_line(set_pixel, xb, yb, xd, yd, null, null, 1, xmin, ymin, xmax, ymax);
     if ('round' === ce)
     {
-        fill_sector(set_pixel, xd, yd, xc, yc, (xc+sx*wy+xd+sx*wy)/2, (yc+sy*wx+yd+sy*wx)/2, lw2, xmin, ymin, xmax, ymax)
+        fill_sector(set_pixel, xd, yd, xc, yc, (xc+sx*wy+xd+sx*wy)/2, (yc+sy*wx+yd+sy*wx)/2, lw, xmin, ymin, xmax, ymax)
     }
     else
     {
-        wu_line(set_pixel, xd, yd, xc, yc, null, null, xmin, ymin, xmax, ymax);
+        wu_line(set_pixel, xd, yd, xc, yc, null, null, 1, xmin, ymin, xmax, ymax);
     }
-    wu_line(set_pixel, xc, yc, xa, ya, null, null, xmin, ymin, xmax, ymax);
+    wu_line(set_pixel, xc, yc, xa, ya, null, null, 1, xmin, ymin, xmax, ymax);
     // fill
     fill_triangle(set_pixel, xa, ya, xb, yb, xc, yc, xmin, ymin, xmax, ymax);
     fill_triangle(set_pixel, xb, yb, xc, yc, xd, yd, xmin, ymin, xmax, ymax);
 }
-function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, dy2, wx2, wy2, j, lw2, mlw, xmin, ymin, xmax, ymax)
+function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, dy2, wx2, wy2, j, ml, xmin, ymin, xmax, ymax)
 {
-    if (is_almost_equal(dy1*dx2, dy2*dx1, 1e-4)) return;
+    if (is_almost_equal(dy1*dx2, dy2*dx1, 1e-6)) return;
 
     var sx1, sy1, sx2, sy2,
         wsx1, wsy1, wsx2, wsy2,
         a1, b1, c1, d1,
         a2, b2, c2, d2,
-        p, q, t, s, mitl;
+        p, q, t, s, mitl, lw;
 
     if (x1 > x2 && x2 > x3)
     {
@@ -2343,7 +2353,7 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
     }
     if ('bevel' === j)
     {
-        wu_line(set_pixel, p.x, p.y, q.x, q.y, null, null, xmin, ymin, xmax, ymax);
+        wu_line(set_pixel, p.x, p.y, q.x, q.y, null, null, 1, xmin, ymin, xmax, ymax);
         fill_triangle(set_pixel, s.x, s.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
     }
     else
@@ -2371,23 +2381,24 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
             t = intersect(b1.x, b1.y, d1.x, d1.y, a2.x, a2.y, c2.x, c2.y);
         }
         mitl = hypot(t.x - s.x, t.y - s.y);
+        lw = stdMath.max(hypot(wx1, wy1), hypot(wx2, wy2));
         if ('round' === j)
         {
-            t = {x:s.x + lw2*(t.x - s.x)/mitl, y:s.y + lw2*(t.y - s.y)/mitl};
+            t = {x:s.x + lw*(t.x - s.x)/mitl, y:s.y + lw*(t.y - s.y)/mitl};
             fill_triangle(set_pixel, s.x, s.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
-            fill_sector(set_pixel, p.x, p.y, q.x, q.y, t.x, t.y, lw2, xmin, ymin, xmax, ymax);
+            fill_sector(set_pixel, p.x, p.y, q.x, q.y, t.x, t.y, lw, xmin, ymin, xmax, ymax);
         }
         else//if('miter' === j)
         {
-            if (mitl > mlw)
+            if (mitl > ml*lw)
             {
-                wu_line(set_pixel, p.x, p.y, q.x, q.y, null, null, xmin, ymin, xmax, ymax);
+                wu_line(set_pixel, p.x, p.y, q.x, q.y, null, null, 1, xmin, ymin, xmax, ymax);
                 fill_triangle(set_pixel, s.x, s.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
             }
             else
             {
-                wu_line(set_pixel, p.x, p.y, t.x, t.y, null, null, xmin, ymin, xmax, ymax);
-                wu_line(set_pixel, q.x, q.y, t.x, t.y, null, null, xmin, ymin, xmax, ymax);
+                wu_line(set_pixel, p.x, p.y, t.x, t.y, null, null, 1, xmin, ymin, xmax, ymax);
+                wu_line(set_pixel, q.x, q.y, t.x, t.y, null, null, 1, xmin, ymin, xmax, ymax);
                 fill_triangle(set_pixel, s.x, s.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
                 fill_triangle(set_pixel, t.x, t.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
             }
@@ -2433,10 +2444,11 @@ function arc_points(cx, cy, rx, ry, a, ts, te, ccw, transform)
 }
 function arc2_points(x0, y0, x1, y1, x2, y2, r, transform)
 {
-    var p = [], params = arc2arc(x0, y0, x1, y1, x2, y2, r);
+    var p = [], params = arc2arc(x0, y0, x1, y1, x2, y2, r), p0;
     if (params && 2 <= params.length)
     {
-        p.push(params[0], params[1]);
+        p0 = transform ? transform.transform(params[0], params[1]) : [params[0], params[1]];
+        p.push(p0[0], p0[1]);
         if (2 < params.length)
         {
             p.push.apply(p, arc_points(params[2], params[3], r, r, 0, params[4], params[5], params[6], transform));
@@ -2547,14 +2559,14 @@ function bezier_points(c)
         };
     return sample_curve(6 < c.length ? cubic : quadratic);
 }
-function stroke_path(set_pixel, path, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, xmin, ymin, xmax, ymax)
+function stroke_path(set_pixel, path, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, sx, sy, xmin, ymin, xmax, ymax)
 {
     for (var i=0,d=path._d,n=d.length,p; i<n; ++i)
     {
         p = d[i];
         if (p && (2 < p.length))
         {
-            stroke_polyline(set_pixel, p, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, xmin, ymin, xmax, ymax);
+            stroke_polyline(set_pixel, p, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, sx, sy, xmin, ymin, xmax, ymax);
         }
     }
 }
