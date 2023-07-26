@@ -2,13 +2,26 @@
 
 Rasterize, stroke and fill lines, rectangles, curves and paths. Even without canvas.
 
-**version: 0.9.8** (25 kB minified)
+**version: 0.9.9** (26 kB minified)
 
-**What is not supported yet:**
+**What is not supported:**
 
-1. `"round"` `lineCap` and `lineJoin` is partially implemented
-2. `lineDash/lineDashOffset` (will be implemented)
-2. text (`strokeText`, `fillText`, ..)  (will **not** be implemented but can be simulated by drawing the actual curves in the font)
+1. `lineDash`/`lineDashOffset` (**will be** implemented)
+2. `strokeText`/`fillText`/`measureText` ..  (will **not** be implemented but can be done by drawing the actual curves in the font)
+3. `shadow`/`shadowBlur`/`shadowColor` .. (will **not** be implemented but is easy to do)
+
+**see also:**
+
+* [Rasterizer](https://github.com/foo123/Rasterizer) stroke and fill lines, rectangles, curves and paths, without canvas.
+* [Gradient](https://github.com/foo123/Gradient) create linear, radial, conic and elliptic gradients and image patterns without canvas.
+* [Geometrize](https://github.com/foo123/Geometrize) Computational Geometry and Rendering Library for JavaScript
+* [Plot.js](https://github.com/foo123/Plot.js) simple and small library which can plot graphs of functions and various simple charts and can render to Canvas, SVG and plain HTML
+* [MOD3](https://github.com/foo123/MOD3) 3D Modifier Library in JavaScript
+* [HAAR.js](https://github.com/foo123/HAAR.js) image feature detection based on Haar Cascades in JavaScript (Viola-Jones-Lienhart et al Algorithm)
+* [HAARPHP](https://github.com/foo123/HAARPHP) image feature detection based on Haar Cascades in PHP (Viola-Jones-Lienhart et al Algorithm)
+* [FILTER.js](https://github.com/foo123/FILTER.js) video and image processing and computer vision Library in pure JavaScript (browser and node)
+* [css-color](https://github.com/foo123/css-color) simple class to parse and manipulate colors in various formats
+
 
 
 **Test/Demo:**
@@ -20,6 +33,8 @@ Rasterize, stroke and fill lines, rectangles, curves and paths. Even without can
 ![bevel polyline join](/joinbevel.png)
 
 ![miter polyline join](/joinmiter.png)
+
+![round polyline join](/joinround.png)
 
 ![gradient arc](/arc.png)
 

@@ -74,10 +74,10 @@ function globalAlpha()
     test2.appendChild(text('Alpha Test'));
     test1.appendChild(canvas1);
     test2.appendChild(canvas2);
-    
+
     const ctx1 = canvas1.getContext("2d");
     const ctx2 = canvas2.getContext("2d");
-    
+
     // Draw background
     ctx1.fillStyle = "#FD0";
     ctx1.fillRect(0, 0, 75, 75);
@@ -139,16 +139,16 @@ function globalComposition(op)
     test2.appendChild(text('Compose Test ('+op+')'));
     test1.appendChild(canvas1);
     test2.appendChild(canvas2);
-    
+
     const ctx1 = canvas1.getContext("2d");
     const ctx2 = canvas2.getContext("2d");
-    
+
     ctx1.globalCompositeOperation = op;
     ctx1.fillStyle = "rgba(0, 0, 255, 0.8)";
     ctx1.fillRect(10, 10, 100, 100);
     ctx1.fillStyle = "rgba(255, 0, 0, 0.5)";
     ctx1.fillRect(50, 50, 100, 100);
-    
+
     const imData = ctx2.getImageData(0, 0, w, h);
     const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
     const ctx = r.getContext("2d");

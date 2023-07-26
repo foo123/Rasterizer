@@ -2,7 +2,7 @@
 *   Rasterizer
 *   rasterize, stroke and fill lines, rectangles, curves and paths
 *
-*   @version 0.9.8
+*   @version 0.9.9
 *   https://github.com/foo123/Rasterizer
 *
 **/
@@ -52,7 +52,7 @@ function Rasterizer(width, height, set_rgba_at)
         err('Unsupported context "'+type+'"');
     };
 }
-Rasterizer.VERSION = '0.9.8';
+Rasterizer.VERSION = '0.9.9';
 Rasterizer[PROTO] = {
     constructor: Rasterizer,
     width: null,
@@ -94,10 +94,10 @@ Rasterizer.setRGBATo = function(IMG) {
             if (0 <= x && x < width && 0 <= y && y < height /*&& 0 < af*/)
             {
                 var index = (x + width*y) << 2,
-                    r0 = data[index  ],
-                    g0 = data[index+1],
-                    b0 = data[index+2],
-                    a0 = data[index+3]/255,
+                    r0 = data[index  ] || 0,
+                    g0 = data[index+1] || 0,
+                    b0 = data[index+2] || 0,
+                    a0 = (data[index+3] || 0)/255,
                     a1 = af, f,
                     ro = 0, go = 0,
                     bo = 0, ao = 0;
@@ -154,22 +154,14 @@ Rasterizer.setRGBATo = function(IMG) {
 
 function RenderingContext2D(width, height, set_rgba_at)
 {
-    var self = this,
-        get_stroke_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]),
-        get_fill_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]),
-        canvas, canvas_reset, canvas_output, clipCanvas = null,
-        mult = 1, set_pixel, fillPath,
-        stroke_pixel, fill_pixel,
-        lineCap = 'butt',
-        lineJoin = 'miter',
-        miterLimit = 10.0,
-        lineWidth = 1,
-        lineDash = [],
-        lineDashOffset = 0,
-        transform = Matrix2D.EYE(),
-        alpha = 1.0,
-        op = 'source-over',
-        currentPath = new Path2D(transform);
+    var self = this, get_stroke_at, get_fill_at,
+        canvas = null, clip_canvas = null,
+        canvas_reset, canvas_output, stack,
+        mult = 1, reset, fill,
+        set_pixel, stroke_pixel, fill_pixel,
+        lineCap, lineJoin, miterLimit,
+        lineWidth, lineDash, lineDashOffset,
+        transform, alpha, op, currentPath;
 
     canvas_reset = function canvas_reset() {
         // sparse array/hash
@@ -181,24 +173,43 @@ function RenderingContext2D(width, height, set_rgba_at)
             var i = canvas[idx], xy = /*+idx*/idx.split(',');
             set_pixel(/*xy % width*/+xy[0], /*~~(xy / width)*/+xy[1], i);
         }
+        canvas = null;
     };
     set_pixel = function set_pixel(x, y, i) {
         if (0 <= x && x < width && 0 <= y && y < height && 0 < i && 0 < alpha)
         {
             var idx = String(x)+','+String(y)/*String(x + y*width)*/,
                 j = canvas[idx] || 0,
-                m = clipCanvas ? (clipCanvas[idx] || 0) : 1;
+                m = clip_canvas ? (clip_canvas[idx] || 0) : 1;
             i *= mult*alpha*m;
             if (i > j) canvas[idx] = i;
         }
     };
     stroke_pixel = function stroke_pixel(x, y, i) {
-        var c = get_stroke_at(x, y), af = 3 < c.length ? c[3] : 1.0;
+        var c = 'clear' === op ? [0,0,0,0] : get_stroke_at(x, y), af = 3 < c.length ? c[3] : 1.0;
         set_rgba_at(x, y, c[0], c[1], c[2], af*i, op);
     };
     fill_pixel = function fill_pixel(x, y, i) {
-        var c = get_fill_at(x, y), af = 3 < c.length ? c[3] : 1.0;
+        var c = 'clear' === op ? [0,0,0,0] : get_fill_at(x, y), af = 3 < c.length ? c[3] : 1.0;
         set_rgba_at(x, y, c[0], c[1], c[2], af*i, op);
+    };
+    reset = function(init) {
+        get_stroke_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]);
+        get_fill_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]);
+        canvas = null;
+        clip_canvas = null;
+        lineCap = 'butt';
+        lineJoin = 'miter';
+        miterLimit = 10.0;
+        lineWidth = 1;
+        lineDash = [];
+        lineDashOffset = 0;
+        transform = Matrix2D.EYE();
+        alpha = 1.0;
+        op = 'source-over';
+        stack = [];
+        currentPath = new Path2D(transform);
+        if (!init) self.clearRect(0, 0, width, height);
     };
 
     def(self, 'strokeStyle', {
@@ -314,6 +325,43 @@ function RenderingContext2D(width, height, set_rgba_at)
         }
     });
 
+    self.save = function() {
+        if (!stack) stack = [];
+        stack.push([
+        get_stroke_at,
+        get_fill_at,
+        clip_canvas,
+        lineCap,
+        lineJoin,
+        miterLimit,
+        lineWidth,
+        lineDash,
+        lineDashOffset,
+        transform,
+        alpha,
+        op
+        ]);
+    };
+    self.restore = function() {
+        if (!stack || !stack.length) return;
+        var state = stack.pop();
+        get_stroke_at = state[0];
+        get_fill_at = state[1];
+        clip_canvas = state[2];
+        lineCap = state[3];
+        lineJoin = state[4];
+        miterLimit = state[5];
+        lineWidth = state[6];
+        lineDash = state[7];
+        lineDashOffset = state[8];
+        currentPath._t = transform = state[9];
+        alpha = state[10];
+        op = state[11];
+    };
+    self.reset = function() {
+        reset();
+    };
+
     self.scale = function(sx, sy) {
         currentPath._t = transform = transform.mul(Matrix2D.scale(sx, sy));
     };
@@ -377,6 +425,14 @@ function RenderingContext2D(width, height, set_rgba_at)
     self.bezierCurveTo = function(x1, y1, x2, y2, x3, y3) {
         currentPath.bezierCurveTo(x1, y1, x2, y2, x3, y3);
     };
+    self.clearRect = function(x, y, w, h) {
+        var o = op, a = alpha;
+        op = 'clear';
+        alpha = 1.0;
+        self.fill((new Path2D(transform)).rect(x, y, w, h), 'evenodd');
+        op = o;
+        alpha = a;
+    };
     self.strokeRect = function(x, y, w, h) {
         if (0 < lineWidth) self.stroke((new Path2D(transform)).rect(x, y, w, h));
     };
@@ -395,7 +451,7 @@ function RenderingContext2D(width, height, set_rgba_at)
             mult = m;
         }
     };
-    fillPath = function(path, fillRule) {
+    fill = function(path, fillRule) {
         var m = mult,
             lw = 0.5/*0.65*/,
             xmin = 0,
@@ -431,7 +487,7 @@ function RenderingContext2D(width, height, set_rgba_at)
         if ('evenodd' !== fillRule) fillRule = 'nonzero';
         path = path || currentPath;
         canvas_reset();
-        fillPath(path, fillRule);
+        fill(path, fillRule);
         canvas_output(fill_pixel);
     };
     self.clip = function(path, fillRule) {
@@ -457,8 +513,8 @@ function RenderingContext2D(width, height, set_rgba_at)
         path = path || currentPath;
         if (path === currentPath) currentPath = new Path2D(transform);
         canvas_reset();
-        fillPath(path, fillRule);
-        clipCanvas = canvas;
+        fill(path, fillRule);
+        clip_canvas = canvas;
         canvas = null;
     };
     self.isPointInStroke = function(path, x, y) {
@@ -482,6 +538,8 @@ function RenderingContext2D(width, height, set_rgba_at)
         if ('evenodd' !== fillRule) fillRule = 'nonzero';
         return point_in_path(x || 0, y || 0, path || currentPath, fillRule);
     };
+
+    reset(true);
 }
 RenderingContext2D[PROTO] = {
     constructor: RenderingContext2D,
@@ -497,6 +555,9 @@ RenderingContext2D[PROTO] = {
     setLineDash: null,
     globalAlpha: null,
     globalCompositeOperation: null,
+    save: null,
+    restore: null,
+    reset: null,
     scale: null,
     rotate: null,
     translate: null,
@@ -514,6 +575,7 @@ RenderingContext2D[PROTO] = {
     arcTo: null,
     quadraticCurveTo: null,
     bezierCurveTo: null,
+    clearRect: null,
     strokeRect: null,
     fillRect: null,
     stroke: null,
@@ -524,15 +586,18 @@ RenderingContext2D[PROTO] = {
     createImageData: function(width, height) {
         return Rasterizer.createImageData(width, height);
     },
-    strokeText: function() {
-        err('Not Implemented!');
-    },
-    fillText: function() {
-        err('Not Implemented!');
-    },
-    measureText: function() {
-        err('Not Implemented!');
-    }
+    getImageData: NOOP,
+    putImageData: NOOP,
+    drawImage: NOOP,
+    // handled through Gradient.js for example
+    createLinearGradient: NOOP,
+    createRadialGradient: NOOP,
+    createConicGradient: NOOP,
+    createPattern: NOOP,
+    // NOT implemented
+    strokeText: NOOP,
+    fillText: NOOP,
+    measureText: NOOP
 };
 Rasterizer.RenderingContext2D = RenderingContext2D;
 
@@ -981,10 +1046,31 @@ function Matrix2D(m11, m12, m13, m21, m22, m23)
             self.m23 = f;
         }
     });
+    def(self, 'is2D', {
+        get: function() {
+            return true;
+        },
+        set: function(_) {
+        }
+    });
+    def(self, 'isIdentity', {
+        get: function() {
+            return  is_strictly_equal(self.m11, 1)
+                 && is_strictly_equal(self.m12, 0)
+                 && is_strictly_equal(self.m13, 0)
+                 && is_strictly_equal(self.m21, 0)
+                 && is_strictly_equal(self.m22, 1)
+                 && is_strictly_equal(self.m23, 0)
+             ;
+        },
+        set: function(_) {
+        }
+    });
 }
 Matrix2D[PROTO] = {
     constructor: Matrix2D,
     is2D: true,
+    isIdentity: true,
     m11: 1,
     m12: 0,
     m13: 0,
@@ -1141,6 +1227,9 @@ Marker[PROTO] = {
     params: null,
     valueOf: function() {
         return this.value;
+    },
+    toString: function() {
+        return String(this.value);
     }
 };
 
@@ -1156,8 +1245,7 @@ function handle(coords, transform)
         for (i=0; i<n; i+=2)
         {
             var xy = transform.transform(coords[i], coords[i+1]);
-            coords[i] = xy[0];
-            coords[i+1] = xy[1];
+            coords[i] = xy[0]; coords[i+1] = xy[1];
         }
     }
     return coords;
@@ -1433,31 +1521,18 @@ function fill_sector(set_pixel, ax, ay, bx, by, px, py, r, xmin, ymin, xmax, yma
 {
     // IN PROGRESS
     // fill circular sector with radius r defined by line a - b and point p
-    var y = stdMath.round(stdMath.min(ay, by, py)),
-        yy = stdMath.round(stdMath.max(ay, by, py)),
-        yab, xab, zab, xi, x, xx,
+    var y, yy, x, xx, xi,
         x1, x2, y1, y2, p, n,
-        t, i, j, k, m, e, c, edg,
+        xab, yab, zab, tol = 0.5,
+        t, i, j, k, m, e, c,
         cx, cy, ta, tb, tp, ccw,
         clip = null != xmin
     ;
-    if (clip)
-    {
-        y = stdMath.max(y, ymin);
-        yy = stdMath.min(yy, ymax);
-    }
-    if (y > yy) return;
     if (by < ay) {t = ay; ay = by; by = t; t = ax; ax = bx; bx = t;}
-    xab = bx - ax;
-    yab = by - ay;
-    zab = is_strictly_equal(yab, 0);
     p = point_line_project(px, py, ax, ay, bx, by);
-    /*fill_rect(set_pixel, stdMath.round(px-1), stdMath.round(py-1), stdMath.round(px+1), stdMath.round(py+1));
-    fill_rect(set_pixel, stdMath.round(p[0]-1), stdMath.round(p[1]-1), stdMath.round(p[0]+1), stdMath.round(p[1]+1));
-    return;*/
     n = hypot(px - p[0], py - p[1]);
-    cx = px + r*(p[0] - px)/n;
-    cy = py + r*(p[1] - py)/n;
+    cx = px + r/n*(p[0] - px);
+    cy = py + r/n*(p[1] - py);
     ta = stdMath.atan2(ay, ax);
     tb = stdMath.atan2(by, bx);
     tp = stdMath.atan2(py, px);
@@ -1466,9 +1541,18 @@ function fill_sector(set_pixel, ax, ay, bx, by, px, py, r, xmin, ymin, xmax, yma
     m = p.length - 2;
     // outline of sector
     for (i=0; i<m; i+=2) wu_line(set_pixel, p[i], p[i+1], p[i+2], p[i+3], null, null, xmin, ymin, xmax, ymax);
-    p = path_to_segments([p, [bx, by, ax, ay]]).sort(asc);
+    p = path_to_segments([p]).sort(asc);
+    y = stdMath.round(stdMath.min(ay, by, py, p.ymin));
+    yy = stdMath.round(stdMath.max(ay, by, py, p.ymax));
+    if (clip)
+    {
+        y = stdMath.max(y, ymin);
+        yy = stdMath.min(yy, ymax);
+    }
+    xab = bx - ax;
+    yab = by - ay;
+    zab = is_strictly_equal(yab, 0);
     i = 0; m = p.length;
-    //edg = new Array(m);
     // fill of sector
     for (; y<=yy; ++y)
     {
@@ -1478,29 +1562,25 @@ function fill_sector(set_pixel, ax, ay, bx, by, px, py, r, xmin, ymin, xmax, yma
         if (e[1] > y)
         {
             y = stdMath.floor(e[1]);
-            //console.log(y, i, p[i]);
             continue;
         }
-        x1 = e[0];
-        x2 = e[2];
-        y1 = e[1];
-        y2 = e[3];
-        if (is_strictly_equal(y1, y2))
+        x = INF;
+        xx = -INF;
+        if (y >= ay && y <= by)
         {
-            x = stdMath.min(x1, x2);
-            xx = stdMath.max(x1, x2);
+            if (zab)
+            {
+                x = stdMath.min(x, ax, bx);
+                xx = stdMath.max(xx, ax, bx);
+            }
+            else
+            {
+                xi = xab*(y - ay)/yab + ax;
+                x = stdMath.min(x, xi);
+                xx = stdMath.max(xx, xi);
+            }
         }
-        else
-        {
-            xi = (x2 - x1)*(y - y1)/(y2 - y1) + x1;
-            x = xi;
-            xx = xi;
-        }
-        e[9] = 0;
-        //edg[0] = e;
-        k = 1;
-        // get rest edges that intersect at this y
-        for (j=i+1; j<m && p[j][1]<=y; ++j)
+        for (j=i; j<m && p[j][1]<=y; ++j)
         {
             e = p[j];
             if (e[3] >= y)
@@ -1520,20 +1600,15 @@ function fill_sector(set_pixel, ax, ay, bx, by, px, py, r, xmin, ymin, xmax, yma
                     x = stdMath.min(x, xi);
                     xx = stdMath.max(xx, xi);
                 }
-                e[9] = 0;
-                //edg[k++] = e;
             }
         }
-        //c = redundant(edg, k, y);
-        //if (c+2 > k) continue; // at least two edges are needed
-        x = stdMath.round(x + 0.5);
-        xx = stdMath.round(xx - 0.5);
+        x = stdMath.round(x + tol);
+        xx = stdMath.round(xx - tol);
         if (clip)
         {
             x = stdMath.max(x, xmin);
             xx = stdMath.min(xx, xmax);
         }
-        //if (x >= xx) console.log(x, xx, y, i, p.slice(i, i+k));
         for (; x<=xx; ++x) set_pixel(x, y, 1);
     }
 }
@@ -1700,11 +1775,11 @@ function wu_thick_line(set_pixel, xs, ys, xe, ye, dx, dy, wx, wy, cs, ce, lw2, x
         if ('square' === ce) ye += sy*wx;
         if ('round' === cs)
         {
-            fill_sector(set_pixel, xs-wx, ys, xs+wx, ys, xs, ys-sy*wx, wx, xmin, ymin, xmax, ymax);
+            fill_sector(set_pixel, xs-wx, ys, xs+wx, ys, xs, ys-sy*wx, lw2, xmin, ymin, xmax, ymax);
         }
         if ('round' === ce)
         {
-            fill_sector(set_pixel, xe-wx, ye, xe+wx, ye, xe, ye+sy*wx, wx, xmin, ymin, xmax, ymax);
+            fill_sector(set_pixel, xe-wx, ye, xe+wx, ye, xe, ye+sy*wx, lw2, xmin, ymin, xmax, ymax);
         }
         return fill_rect(set_pixel, stdMath.round(xs - wx), stdMath.round(ys), stdMath.round(xs + wx), stdMath.round(ye), xmin, ymin, xmax, ymax);
     }
@@ -1714,11 +1789,11 @@ function wu_thick_line(set_pixel, xs, ys, xe, ye, dx, dy, wx, wy, cs, ce, lw2, x
         if ('square' === ce) xe += sx*wy;
         if ('round' === cs)
         {
-            fill_sector(set_pixel, xs, ys-wy, xs, ys+wy, xs-wy, ys, wy, xmin, ymin, xmax, ymax);
+            fill_sector(set_pixel, xs, ys-wy, xs, ys+wy, xs-wy, ys, lw2, xmin, ymin, xmax, ymax);
         }
         if ('round' === ce)
         {
-            fill_sector(set_pixel, xe, ye-wy, xe, ye+wy, xe+wy, ye, wy, xmin, ymin, xmax, ymax);
+            fill_sector(set_pixel, xe, ye-wy, xe, ye+wy, xe+wy, ye, lw2, xmin, ymin, xmax, ymax);
         }
         return fill_rect(set_pixel, stdMath.round(xs), stdMath.round(ys - wy), stdMath.round(xe), stdMath.round(ys + wy), xmin, ymin, xmax, ymax);
     }
@@ -1758,21 +1833,27 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
     yd = ye - wsy;
 
     // outline
-    wu_line(set_pixel, xa, ya, xb, yb, null, null, xmin, ymin, xmax, ymax);
+    if ('round' === cs)
+    {
+        fill_sector(set_pixel, xa, ya, xb, yb, (xa-sx*wy+xb-sx*wy)/2, (ya-sy*wx+yb-sy*wx)/2, lw2, xmin, ymin, xmax, ymax)
+    }
+    else
+    {
+        wu_line(set_pixel, xa, ya, xb, yb, null, null, xmin, ymin, xmax, ymax);
+    }
     wu_line(set_pixel, xb, yb, xd, yd, null, null, xmin, ymin, xmax, ymax);
-    wu_line(set_pixel, xd, yd, xc, yc, null, null, xmin, ymin, xmax, ymax);
+    if ('round' === ce)
+    {
+        fill_sector(set_pixel, xd, yd, xc, yc, (xc+sx*wy+xd+sx*wy)/2, (yc+sy*wx+yd+sy*wx)/2, lw2, xmin, ymin, xmax, ymax)
+    }
+    else
+    {
+        wu_line(set_pixel, xd, yd, xc, yc, null, null, xmin, ymin, xmax, ymax);
+    }
     wu_line(set_pixel, xc, yc, xa, ya, null, null, xmin, ymin, xmax, ymax);
     // fill
     fill_triangle(set_pixel, xa, ya, xb, yb, xc, yc, xmin, ymin, xmax, ymax);
     fill_triangle(set_pixel, xb, yb, xc, yc, xd, yd, xmin, ymin, xmax, ymax);
-    if ('round' === cs)
-    {
-        fill_sector(set_pixel, xa, ya, xb, yb, (xa+xb)/2, stdMath[0 > sy ? 'max' : 'min'](ya, yb), lw2, xmin, ymin, xmax, ymax)
-    }
-    if ('round' === ce)
-    {
-        fill_sector(set_pixel, xd, yd, xc, yc, (xc+xd)/2, stdMath[0 > sy ? 'min' : 'max'](yc, yd), lw2, xmin, ymin, xmax, ymax)
-    }
 }
 function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, dy2, wx2, wy2, j, lw2, mlw, xmin, ymin, xmax, ymax)
 {
@@ -1855,33 +1936,7 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
         wu_line(set_pixel, p.x, p.y, q.x, q.y, null, null, xmin, ymin, xmax, ymax);
         fill_triangle(set_pixel, s.x, s.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
     }
-    else if ('round' === j)
-    {
-        if (sx1 === sx2)
-        {
-            if (sy1 === sy2)
-            {
-                if (is_strictly_equal(dy1, 0))
-                {
-                    t = intersect(b1.x, b1.y, d1.x, d1.y, b2.x, b2.y, d2.x, d2.y);
-                }
-                else
-                {
-                    t = intersect(a1.x, a1.y, c1.x, c1.y, a2.x, a2.y, c2.x, c2.y);
-                }
-            }
-            else
-            {
-                t = intersect(a1.x, a1.y, c1.x, c1.y, b2.x, b2.y, d2.x, d2.y);
-            }
-        }
-        else //if (sx1 !== sx2)
-        {
-            t = intersect(b1.x, b1.y, d1.x, d1.y, a2.x, a2.y, c2.x, c2.y);
-        }
-        fill_sector(set_pixel, p.x, p.y, q.x, q.y, t.x, t.y, lw2, xmin, ymin, xmax, ymax);
-    }
-    else if ('miter' === j)
+    else
     {
         if (sx1 === sx2)
         {
@@ -1906,17 +1961,26 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
             t = intersect(b1.x, b1.y, d1.x, d1.y, a2.x, a2.y, c2.x, c2.y);
         }
         mitl = hypot(t.x - s.x, t.y - s.y);
-        if (mitl > mlw)
+        if ('round' === j)
         {
-            wu_line(set_pixel, p.x, p.y, q.x, q.y, null, null, xmin, ymin, xmax, ymax);
+            t = {x:s.x + lw2*(t.x - s.x)/mitl, y:s.y + lw2*(t.y - s.y)/mitl};
             fill_triangle(set_pixel, s.x, s.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
+            fill_sector(set_pixel, p.x, p.y, q.x, q.y, t.x, t.y, lw2, xmin, ymin, xmax, ymax);
         }
-        else
+        else//if('miter' === j)
         {
-            wu_line(set_pixel, p.x, p.y, t.x, t.y, null, null, xmin, ymin, xmax, ymax);
-            wu_line(set_pixel, q.x, q.y, t.x, t.y, null, null, xmin, ymin, xmax, ymax);
-            fill_triangle(set_pixel, s.x, s.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
-            fill_triangle(set_pixel, t.x, t.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
+            if (mitl > mlw)
+            {
+                wu_line(set_pixel, p.x, p.y, q.x, q.y, null, null, xmin, ymin, xmax, ymax);
+                fill_triangle(set_pixel, s.x, s.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
+            }
+            else
+            {
+                wu_line(set_pixel, p.x, p.y, t.x, t.y, null, null, xmin, ymin, xmax, ymax);
+                wu_line(set_pixel, q.x, q.y, t.x, t.y, null, null, xmin, ymin, xmax, ymax);
+                fill_triangle(set_pixel, s.x, s.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
+                fill_triangle(set_pixel, t.x, t.y, p.x, p.y, q.x, q.y, xmin, ymin, xmax, ymax);
+            }
         }
     }
 }
@@ -1929,15 +1993,10 @@ function arc_angles(ts, te, ccw)
         te = ts + delta;
     }*/
     var t0 = cmod(ts), t1 = te + (t0 - ts);
-
-  if (!ccw && t1 - t0 >= TWO_PI)
-    t1 = t0 + TWO_PI;
-  else if (ccw && t0 - t1 >= TWO_PI)
-    t1 = t0 - TWO_PI;
-  else if (!ccw && t0 > t1)
-    t1 = t0 + (TWO_PI - cmod(t0 - t1));
-  else if (ccw && t0 < t1)
-    t1 = t0 - (TWO_PI - cmod(t1 - t0));
+    if (!ccw && t1 - t0 >= TWO_PI) t1 = t0 + TWO_PI;
+    else if (ccw && t0 - t1 >= TWO_PI) t1 = t0 - TWO_PI;
+    else if (!ccw && t0 > t1) t1 = t0 + (TWO_PI - cmod(t0 - t1));
+    else if (ccw && t0 < t1) t1 = t0 - (TWO_PI - cmod(t1 - t0));
     return [t0, t1];
 }
 function arc_points(cx, cy, rx, ry, a, ts, te, ccw, transform)
@@ -1947,13 +2006,14 @@ function arc_points(cx, cy, rx, ry, a, ts, te, ccw, transform)
     var cos = a ? stdMath.cos(a) : 1,
         sin = a ? stdMath.sin(a) : 0,
         delta = te - ts,
+        hasTransform = transform && !transform.isIdentity,
         arc = function(t) {
             var p = ts + t*delta,
                 x = rx*stdMath.cos(p),
                 y = ry*stdMath.sin(p),
                 xo = cx + cos*x - sin*y,
                 yo = cy + sin*x + cos*y;
-            return transform ? transform.transform(xo, yo) : [xo, yo];
+            return hasTransform ? transform.transform(xo, yo) : [xo, yo];
         },
         points = sample_curve(arc);
 
@@ -2095,7 +2155,7 @@ function fill_path(set_pixel, path, rule, xmin, ymin, xmax, ymax)
     var n = edges.length,
         edg = new Array(n),
         y = edges.ymin, yM = edges.ymax,
-        i = 0, j, k, d, e, c,
+        i = 0, j, k, d, e, c, tol = 0.5,
         y1, y2, x, xm, xM, x1, x2, xi,
         insidel, insider,
         evenodd = 'evenodd' === rule;
@@ -2163,8 +2223,8 @@ function fill_path(set_pixel, path, rule, xmin, ymin, xmax, ymax)
         // some edges found are redundant, mark them
         c = redundant(edg, k, y);
         if (c+2 > k) continue; // at least two edges are needed
-        xm = stdMath.max(xmin, stdMath.round(xm + 0.5));
-        xM = stdMath.min(xmax, stdMath.round(xM - 0.5));
+        xm = stdMath.max(xmin, stdMath.round(xm + tol));
+        xM = stdMath.min(xmax, stdMath.round(xM - tol));
         if (xm > xM) continue; // no fill at this point
         if (evenodd)
         {
@@ -2367,10 +2427,6 @@ function hypot(dx, dy)
         return dy*stdMath.sqrt(1 + r*r);
     }
     return dx*sqrt2;
-}
-function sign(x)
-{
-    return 0 > x ? -1 : 1;
 }
 function wn(x, y, x1, y1, x2, y2)
 {
@@ -2600,6 +2656,10 @@ function clamp(x, min, max)
 {
     return stdMath.min(stdMath.max(x, min), max);
 }
+/*(function sign(x)
+{
+    return 0 > x ? -1 : 1;
+}*/
 function mod(x, m, xmin, xmax)
 {
     x -= m*stdMath.floor(x/m);
