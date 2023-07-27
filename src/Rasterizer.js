@@ -266,7 +266,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         },
         set: function(lw) {
             lw = +lw;
-            if (!is_nan(lw) && is_finite(lw) && (0 <= lw))
+            if (!is_nan(lw) && is_finite(lw) && (0 < lw))
             {
                 lineWidth = lw;
             }
@@ -314,7 +314,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         },
         set: function(ldo) {
             ldo = +ldo;
-            if (!is_nan(ldo) && is_finite(ldo) && (0 <= ldo))
+            if (!is_nan(ldo) && is_finite(ldo))
             {
                 lineDashOffset = ldo;
             }
@@ -815,7 +815,7 @@ RenderingContext2D.Interpolation = {
 };
 function Path2D(path, transform)
 {
-    var self = this, need_new_subpath = true, d = [], sd = null;
+    var self = this, need_new_subpath = true, d = [], sd = null, add_path;
 
     def(self, 'transform', {
         get: function() {
@@ -1096,10 +1096,11 @@ function Path2D(path, transform)
         sd = null;
         return self;
     };
+
     self.addPath = function(path/*, transform*/) {
         if (path instanceof Path2D)
         {
-            d.push.apply(d, path._d);
+            add_path(path);
             sd = null;
         }
         return self;
@@ -1107,6 +1108,23 @@ function Path2D(path, transform)
     self.dispose = function() {
         d = null;
         sd = null;
+    };
+
+    add_path = function(path/*, transform*/) {
+        var last;
+        d.push.apply(d, path._d.map(function(p) {
+            if (p.length) last = [+p[p.length-2], p[p.length-1]];
+            return p.slice();
+        }));
+        if (last)
+        {
+            d.push(last);
+            need_new_subpath = false;
+        }
+        else
+        {
+            need_new_subpath = true;
+        }
     };
 
     if (1 === arguments.length)
@@ -1121,10 +1139,11 @@ function Path2D(path, transform)
             transform = null;
         }
     }
+    if (!(transform instanceof Matrix2D)) transform = null;
     transform = transform || Matrix2D.EYE();
     if (path)
     {
-        if (path instanceof Path2D) d.push.apply(d, path._d);
+        if (path instanceof Path2D) add_path(path);
         else parse_path(path, self);
     }
 }
@@ -2684,7 +2703,8 @@ function parse_path(d, path)
 {
     var c = trim(String(d)).match(COMMAND),
         p = d.split(COMMAND),
-        curr = [0, 0], start = [curr[0], curr[1]], prev;
+        curr = [0, 0], start = [curr[0], curr[1]],
+        prev = null, hasPath = false;
     c && c.forEach(function(c, i) {
         var isRelative = c === c.toLowerCase(),
             pp = (trim(p[i+1] || '').match(NUMBER) || []).map(parse_number),
@@ -2692,6 +2712,7 @@ function parse_path(d, path)
         switch (c.toUpperCase())
         {
             case 'M':
+            hasPath = true;
             implicitLine = false;
             while (2 <= pp.length)
             {
@@ -2718,6 +2739,7 @@ function parse_path(d, path)
             prev = null;
             break;
             case 'H':
+            hasPath = true;
             while (1 <= pp.length)
             {
                 p1 = [curr[0], curr[1]];
@@ -2732,6 +2754,7 @@ function parse_path(d, path)
             prev = null;
             break;
             case 'V':
+            hasPath = true;
             while (1 <= pp.length)
             {
                 p1 = [curr[0], curr[1]];
@@ -2746,6 +2769,7 @@ function parse_path(d, path)
             prev = null;
             break;
             case 'L':
+            hasPath = true;
             while (2 <= pp.length)
             {
                 p1 = [curr[0], curr[1]];
@@ -2760,6 +2784,7 @@ function parse_path(d, path)
             prev = null;
             break;
             case 'A':
+            hasPath = true;
             while (7 <= pp.length)
             {
                 tmp = {
@@ -2785,6 +2810,7 @@ function parse_path(d, path)
             prev = null;
             break;
             case 'Q':
+            hasPath = true;
             while (4 <= pp.length)
             {
                 p1 = [curr[0], curr[1]];
@@ -2803,6 +2829,7 @@ function parse_path(d, path)
             }
             break;
             case 'T':
+            hasPath = true;
             while (2 <= pp.length)
             {
                 p1 = [curr[0], curr[1]];
@@ -2821,6 +2848,7 @@ function parse_path(d, path)
             }
             break;
             case 'C':
+            hasPath = true;
             while (6 <= pp.length)
             {
                 p1 = [curr[0], curr[1]];
@@ -2843,6 +2871,7 @@ function parse_path(d, path)
             }
             break;
             case 'S':
+            hasPath = true;
             while (4 <= pp.length)
             {
                 p1 = [curr[0], curr[1]];
@@ -2875,6 +2904,7 @@ function parse_path(d, path)
             break;
         }
     });
+    if (hasPath) path.moveTo(curr[0], curr[1]);
 }
 function wn(x, y, x1, y1, x2, y2)
 {
