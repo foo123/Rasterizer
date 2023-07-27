@@ -28,7 +28,9 @@ Rasterize, stroke and fill lines, rectangles, curves and paths. Even without can
 
 ![line](/line.png)
 
-![gradient thick line](/thicklines.png)
+![gradient thick line square](/thicklines.png)
+
+![gradient thick line round](/thicklines2.png)
 
 ![bevel polyline join](/joinbevel.png)
 

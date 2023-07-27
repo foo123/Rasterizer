@@ -472,12 +472,9 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         if (0 < lineWidth)
         {
             path = path || currentPath;
-            var t = path.transform, sx = 1, sy = 1;
-            if (!t.isIdentity)
-            {
-                sx = hypot(t.m11, t.m21);
-                sy = hypot(-t.m12, t.m22);
-            }
+            var t = path.transform,
+                sx = stdMath.abs(t.sx),
+                sy = stdMath.abs(t.sy);
             canvas_reset();
             stroke_path(set_pixel, path, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, sx, sy, 0, 0, width - 1, height - 1);
             canvas_output(stroke_pixel);
@@ -974,24 +971,16 @@ function Path2D(transform)
             lowerLeft *= scale;
             lowerRight *= scale;
         }
-        var o = transform.transform(0, 0),
-            point = function(p, x, y) {
-                var t = transform.transform(x, y);
-                p.push(t[0], t[1]);
-            },
-            arc = function(p, x0, y0, x1, y1, x2, y2, r) {
-                p.push.apply(p, arc2_points(x0, y0, x1, y1, x2, y2, r, transform));
-            };
         p = [];
-        point(p, x + upperLeft, y);
-        point(p, x + w - upperRight, y);
-        arc(p, x + w - upperRight, y, x + w, y, x + w, y + upperRight, upperRight);
-        point(p, x + w, y + h - lowerRight);
-        arc(p, x + w, y + h - lowerRight, x + w, y + h, x + w - lowerRight, y + h, lowerRight);
-        point(p, x + lowerLeft, y + h);
-        arc(p, x + lowerLeft, y + h, x, y + h, x, y + h - lowerLeft, lowerLeft);
-        point(p, x, y + upperLeft);
-        arc(p, x, y + upperLeft, x, y, x + upperLeft, y, upperLeft);
+        add_point(p, x + upperLeft, y, transform);
+        add_point(p, x + w - upperRight, y, transform);
+        add_arcto(p, x + w - upperRight, y, x + w, y, x + w, y + upperRight, upperRight, transform);
+        add_point(p, x + w, y + h - lowerRight, transform);
+        add_arcto(p, x + w, y + h - lowerRight, x + w, y + h, x + w - lowerRight, y + h, lowerRight, transform);
+        add_point(p, x + lowerLeft, y + h, transform);
+        add_arcto(p, x + lowerLeft, y + h, x, y + h, x, y + h - lowerLeft, lowerLeft, transform);
+        add_point(p, x, y + upperLeft, transform);
+        add_arcto(p, x, y + upperLeft, x, y, x + upperLeft, y, upperLeft, transform);
         p[0] = new Marker(+p[0], {lineCap:'butt', lineJoin:'bevel'});
         d.push(p);
         d.push(transform.transform(x, y));
@@ -1140,7 +1129,7 @@ RenderingContext2D.Path2D = Path2D;
 
 function Matrix2D(m11, m12, m13, m21, m22, m23)
 {
-    var self = this;
+    var self = this, sx = 1, sy = 1;
     if (arguments.length)
     {
         self.m11 = m11;
@@ -1157,7 +1146,7 @@ function Matrix2D(m11, m12, m13, m21, m22, m23)
             return self.m11;
         },
         set: function(a) {
-            self.m11 = a;
+            self.m11 = sx = a;
         }
     });
     def(self, 'c', {
@@ -1189,7 +1178,7 @@ function Matrix2D(m11, m12, m13, m21, m22, m23)
             return self.m22;
         },
         set: function(d) {
-            self.m22 = d;
+            self.m22 = sy = d;
         }
     });
     def(self, 'f', {
@@ -1220,6 +1209,22 @@ function Matrix2D(m11, m12, m13, m21, m22, m23)
         set: function(_) {
         }
     });
+    def(self, 'sx', {
+        get: function() {
+            return sx;
+        },
+        set: function(s) {
+            sx *= s;
+        }
+    });
+    def(self, 'sy', {
+        get: function() {
+            return sy;
+        },
+        set: function(s) {
+            sy *= s;
+        }
+    });
 }
 Matrix2D[PROTO] = {
     constructor: Matrix2D,
@@ -1241,17 +1246,20 @@ Matrix2D[PROTO] = {
     e: null,
     f: null,
     clone: function() {
-        var self = this;
-        return new Matrix2D(
+        var self = this, m;
+        m  = new Matrix2D(
         self.m11, self.m12, self.m13,
         self.m21, self.m22, self.m23
         );
+        m.sx = self.sx;
+        m.sy = self.sy;
+        return m;
     },
     mul: function(other) {
-        var self = this;
+        var self = this, m;
         if (other instanceof Matrix2D)
         {
-            return new Matrix2D(
+            m = new Matrix2D(
             self.m11*other.m11 + self.m12*other.m21,
             self.m11*other.m12 + self.m12*other.m22,
             self.m11*other.m13 + self.m12*other.m23 + self.m13,
@@ -1259,6 +1267,9 @@ Matrix2D[PROTO] = {
             self.m21*other.m12 + self.m22*other.m22,
             self.m21*other.m13 + self.m22*other.m23 + self.m23
             );
+            m.sx = self.sx * other.sx;
+            m.sy = self.sy * other.sy;
+            return m;
         }
     },
     inv: function() {
@@ -1271,10 +1282,13 @@ Matrix2D[PROTO] = {
         if (is_strictly_equal(det2, 0)) return null;
         i00 = a11/det2; i01 = -a01/det2;
         i10 = -a10/det2; i11 = a00/det2;
-        return new Matrix2D(
+        var m = new Matrix2D(
         i00, i01, -i00*a02 - i01*a12,
         i10, i11, -i10*a02 - i11*a12
         );
+        m.sx = 1/self.sx;
+        m.sy = 1/self.sy;
+        return m;
     },
     transform: function(x, y) {
         if (1 === arguments.length)
@@ -1287,45 +1301,7 @@ Matrix2D[PROTO] = {
             self.m11*x + self.m12*y + self.m13,
             self.m21*x + self.m22*y + self.m23
         ];
-    }/*,
-    getTranslation: function() {
-        /*
-        if matrix can be factored as:
-        T * R * S = |1 0 tx| * |cos -sin 0| * |sx 0  0| = |sxcos -sysin tx| = |00 01 02|
-                    |0 1 ty|   |sin cos  0|   |0  sy 0|   |sxsin sycos  ty|   |10 11 12|
-                    |0 0 1 |   |0   0    1|   |0  0  1|   |0      0     1 |   |20 21 22|
-        * /
-        var self = this;
-        return [
-            self.m13,
-            self.m23
-        ];
-    },
-    getRotationAngle: function() {
-        /*
-        if matrix can be factored as:
-        T * R * S = |1 0 tx| * |cos -sin 0| * |sx 0  0| = |sxcos -sysin tx| = |00 01 02|
-                    |0 1 ty|   |sin cos  0|   |0  sy 0|   |sxsin sycos  ty|   |10 11 12|
-                    |0 0 1 |   |0   0    1|   |0  0  1|   |0      0     1 |   |20 21 22|
-        * /
-        var self = this;
-        return stdMath.atan2(self.m21, self.m11);
-    },
-    getScale: function() {
-        /*
-        if matrix can be factored as:
-        T * R * S = |1 0 tx| * |cos -sin 0| * |sx 0  0| = |sxcos -sysin tx| = |00 01 02|
-                    |0 1 ty|   |sin cos  0|   |0  sy 0|   |sxsin sycos  ty|   |10 11 12|
-                    |0 0 1 |   |0   0    1|   |0  0  1|   |0      0     1 |   |20 21 22|
-        * /
-        var self = this,
-            a = self.m11, b = -self.m12,
-            c = self.m21, d = self.m22;
-        return [
-        sign(a)*hypot(a, c),
-        sign(d)*hypot(b, d)
-        ];
-    }*/
+    }
 };
 Matrix2D.translate = function(tx, ty) {
     return new Matrix2D(
@@ -1336,10 +1312,13 @@ Matrix2D.translate = function(tx, ty) {
 Matrix2D.scale = function(sx, sy, ox, oy) {
     ox = ox || 0;
     oy = oy || 0;
-    return new Matrix2D(
+    var m = new Matrix2D(
     sx, 0,  -sx*ox + ox,
     0,  sy, -sy*oy + oy
     );
+    m.sx = sx;
+    m.sy = sy;
+    return m;
 };
 Matrix2D.rotate = function(theta, ox, oy) {
     ox = ox || 0;
@@ -1404,6 +1383,19 @@ function handle(coords, transform)
     }
     return coords;
 }
+function add_point(p, x, y, transform)
+{
+    var t = transform ? transform.transform(x, y) : [x, y];
+    p.push(t[0], t[1]);
+}
+function add_arc(p, cx, cy, rx, ry, angle, ts, te, ccw, transform)
+{
+    p.push.apply(p, arc_points(cx, cy, rx, ry, angle, ts, te, ccw, transform));
+}
+function add_arcto(p, x0, y0, x1, y1, x2, y2, r, transform)
+{
+    p.push.apply(p, arc2_points(x0, y0, x1, y1, x2, y2, r, transform));
+}
 function stroke_polyline(set_pixel, points, lw, ld, ldo, lc, lj, ml, sx, sy, xmin, ymin, xmax, ymax)
 {
     var n = points.length, i,
@@ -1461,25 +1453,21 @@ function stroke_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, lw, xmin
 function ww(w, dx, dy, sx, sy)
 {
     var wxy, n, w2;
-    /*if (1 >= w)
+    w2 = stdMath.abs((w/*-1*/)/2);
+    if (is_strictly_equal(dx, 0))
     {
-        wxy = [0, 0];
-    }
-    else*/ if (is_strictly_equal(dx, 0))
-    {
-        wxy = [sx*(w/*-1*/)/2, 0];
+        wxy = [sx*w2, 0];
     }
     else if (is_strictly_equal(dy, 0))
     {
-        wxy = [0, sy*(w/*-1*/)/2];
+        wxy = [0, sy*w2];
     }
     else
     {
         n = hypot(dx, dy);
-        w2 = (w/*-1*/)/2;
         wxy = [sx*dy*w2/n, sy*dx*w2/n];
     }
-    if (1 > wxy[0] && 1 > wxy[1]) wxy = [0, 0];
+    if (0.5 >= wxy[0] && 0.5 >= wxy[1]) wxy = [0, 0];
     return wxy;
 }
 function clip(x1, y1, x2, y2, xmin, ymin, xmax, ymax)
@@ -1676,13 +1664,12 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
 }
 function fill_sector(set_pixel, ax, ay, bx, by, px, py, r, xmin, ymin, xmax, ymax)
 {
-    // IN PROGRESS
     // fill circular sector with radius r defined by line a - b and point p
     var y, yy, x, xx, xi,
         x1, x2, y1, y2, p, n,
         xab, yab, zab, tol = 0.5,
         t, i, j, k, m, e, c,
-        cx, cy, ta, tb, tp, ccw,
+        cx, cy, ta, tb, t0, t1, tp, ccw,
         clip = null != xmin
     ;
     if (by < ay) {t = ay; ay = by; by = t; t = ax; ax = bx; bx = t;}
@@ -1690,10 +1677,13 @@ function fill_sector(set_pixel, ax, ay, bx, by, px, py, r, xmin, ymin, xmax, yma
     n = hypot(px - p[0], py - p[1]);
     cx = px + r/n*(p[0] - px);
     cy = py + r/n*(p[1] - py);
-    ta = stdMath.atan2(ay, ax);
-    tb = stdMath.atan2(by, bx);
-    tp = stdMath.atan2(py, px);
-    ccw = (tp > ta);
+    tp = stdMath.atan2(py - cy, px - cx);
+    ta = stdMath.atan2(ay - cy, ax - cx);
+    tb = stdMath.atan2(by - cy, bx - cx);
+    tp = cmod(tp);
+    t0 = cmod(ta);
+    t1 = cmod(tb);
+    ccw = !((tp < t0 && tp < t1) || (tp > t0 && tp > t1) || (tp > t0 && tp < t1));
     p = arc_points(cx, cy, r, r, 0, ta, tb, ccw);
     m = p.length - 2;
     // outline of sector
@@ -2054,12 +2044,12 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
         t = wy1;
         wy1 = wy2;
         wy2 = t;
-    }*/
+    }
 
     sx1 = x1 > x2 ? -1 : 1;
     sy1 = y1 > y2 ? -1 : 1;
     sx2 = x2 > x3 ? -1 : 1;
-    sy2 = y2 > y3 ? -1 : 1;
+    sy2 = y2 > y3 ? -1 : 1;*/
     wsx1 = sx1*wx1;
     wsy1 = sy1*wy1;
     wsx2 = sx2*wx2;
@@ -2074,107 +2064,34 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
     d2 = {x:x3 + wsx2, y:y3 - wsy2};
     s = {x:x2, y:y2};
 
-    // FIX: FAILS IN SOME CASES TO FIND CORRECT p,q points
     if (sy1*dy1*sx2*dx2 > sy2*dy2*sx1*dx1)
     {
-        if (sx1*sy2 === sx2*sy1)
-        {
-            if (0 > sx1*sy2)
-            {
-                p = d1;
-                q = b2;
-            }
-            else
-            {
-                p = c1;
-                q = a2;
-            }
-        }
-        else
-        {
-            if (0 > sx1*sy2)
-            {
-                p = c1;
-                q = b2;
-            }
-            else
-            {
-                p = d1;
-                q = a2;
-            }
-        }
+        p = c1;
+        q = a2;
     }
     else
     {
-        if (sx1*sy2 === sx2*sy1)
-        {
-            if (0 > sx1*sy2)
-            {
-                p = c1;
-                q = a2;
-            }
-            else
-            {
-                p = d1;
-                q = b2;
-            }
-        }
-        else
-        {
-            if (0 > sx1*sy2)
-            {
-                p = c1;
-                q = b2;
-            }
-            else
-            {
-                p = d1;
-                q = a2;
-            }
-        }
+        p = d1;
+        q = b2;
     }
-    /*if (sx1 === sx2)
+    if (0 > sx2*sy1*sx1*sy2)
     {
-        if (sy1 === sy2)
-        {
-            if ((0 > sy1) || is_strictly_equal(dy1, 0))
-            {
-                p = d1;
-                q = b2;
-            }
-            else
-            {
-                p = c1;
-                q = a2;
-            }
-        }
-        else
-        {
-            p = c1;
-            q = b2;
-        }
+        p = d1 === p ? c1 : d1;
+        q = b2 === q ? a2 : b2;
     }
-    else //if (sx1 !== sx2)
+    if (0 > sx1*sy2)
     {
-        if (sy1 === sy2)
-        {
-            if (dy1 < dy2)
-            {
-                p = d1;
-                q = a2;
-            }
-            else
-            {
-                p = d1;
-                q = a2;
-            }
-        }
-        else
-        {
-            p = d1;
-            q = b2;
-        }
-    }*/
+        p = d1 === p ? c1 : d1;
+    }
+    if (0 > sx2*sy1)
+    {
+        q = b2 === q ? a2 : b2;
+    }
+    if (0 > sx1*sx2)
+    {
+        p = d1 === p ? c1 : d1;
+        q = b2 === q ? a2 : b2;
+    }
     if ('bevel' === j)
     {
         wu_line(set_pixel, p.x, p.y, q.x, q.y, null, null, 1, xmin, ymin, xmax, ymax);
@@ -2212,12 +2129,6 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
 }
 function arc_angles(ts, te, ccw)
 {
-    /*if (ccw)
-    {
-        delta = cmod(delta) - TWO_PI;
-        ts = cmod(ts);
-        te = ts + delta;
-    }*/
     var t0 = cmod(ts), t1 = te + (t0 - ts);
     if (!ccw && t1 - t0 >= TWO_PI) t1 = t0 + TWO_PI;
     else if (ccw && t0 - t1 >= TWO_PI) t1 = t0 - TWO_PI;
@@ -2660,76 +2571,6 @@ function wn(x, y, x1, y1, x2, y2)
     // orientation winding number
     return 0 > (x - x1)*(y2 - y1) - (x2 - x1)*(y - y1) ? -1 : 1;
 }
-/*function line_segments_intersection(x1, y1, x2, y2, x3, y3, x4, y4)
-{
-    var a = y2 - y1,
-        b = x1 - x2,
-        c = x2*y1 - x1*y2,
-        k = y4 - y3,
-        l = x3 - x4,
-        m = x4*y3 - x3*y4,
-        D = a*l - b*k, x, y, xx, yy,
-        t = 0, dx, dy, dxp, dyp;
-    if (is_strictly_equal(D, 0))
-    {
-        // either overlapping or parallel but disjoint
-        if (
-            is_almost_equal((y3 - y1)*(x2 - x1), (y2 - y1)*(x3 - x1))
-            && is_almost_equal((y4 - y1)*(x2 - x1), (y2 - y1)*(x4 - x1))
-        )
-        {
-            // partial overlap
-            if (x1 <= x2 && x3 <= x4)
-            {
-                x = stdMath.max(x1, x3);
-                xx = stdMath.min(x2, x4);
-            }
-            else if (x1 >= x2 && x3 >= x4)
-            {
-                x = stdMath.min(x1, x3);
-                xx = stdMath.max(x2, x4);
-            }
-            else if (x1 <= x2 && x3 >= x4)
-            {
-                x = stdMath.max(x1, x4);
-                xx = stdMath.min(x2, x3);
-            }
-            else
-            {
-                x = stdMath.min(x1, x4);
-                xx = stdMath.max(x2, x3);
-            }
-            y = is_strictly_equal(x1, x2) ? stdMath.y1 : ((x - x1)*(y2 - y1)/(x2 - x1) + y1);
-            yy = is_strictly_equal(y1, y2) ? y1 : ((xx - x1)*(y2 - y1)/(x2 - x1) + y1);
-            return [x, y, xx, yy];
-        }
-        else
-        {
-            // disjoint
-            return 0;
-        }
-    }
-    else
-    {
-        // intersect in 1 point
-        x = (b*m - c*l)/D;
-        y = (c*k - a*m)/D;
-        // make sure point is on both segments and not their extensions
-        dxp = x - x1;
-        dx = x2 - x1;
-        dyp = y - y1;
-        dy = y2 - y1;
-        t = is_strictly_equal(dx, 0) ? dyp/dy : dxp/dx;
-        if (!((t >= 0) && (t <= 1))) return 0;
-        dxp = x - x3;
-        dx = x4 - x3;
-        dyp = y - y3;
-        dy = y4 - y3;
-        t = is_strictly_equal(dx, 0) ? dyp/dy : dxp/dx;
-        if (!((t >= 0) && (t <= 1))) return 0;
-        return [x, y];
-    }
-}*/
 function point_line_distance(x, y, x1, y1, x2, y2)
 {
     var dx = x2 - x1,
@@ -2883,10 +2724,6 @@ function clamp(x, min, max)
 {
     return stdMath.min(stdMath.max(x, min), max);
 }
-/*(function sign(x)
-{
-    return 0 > x ? -1 : 1;
-}*/
 function mod(x, m, xmin, xmax)
 {
     x -= m*stdMath.floor(x/m);
