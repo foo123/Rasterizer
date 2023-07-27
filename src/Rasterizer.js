@@ -472,9 +472,12 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         if (0 < lineWidth)
         {
             path = path || currentPath;
-            var t = path.transform,
-                sx = hypot(t.m11, t.m21),
+            var t = path.transform, sx = 1, sy = 1;
+            if (!t.isIdentity)
+            {
+                sx = hypot(t.m11, t.m21);
                 sy = hypot(-t.m12, t.m22);
+            }
             canvas_reset();
             stroke_path(set_pixel, path, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, sx, sy, 0, 0, width - 1, height - 1);
             canvas_output(stroke_pixel);
@@ -741,26 +744,7 @@ RenderingContext2D[PROTO] = {
 Rasterizer.RenderingContext2D = RenderingContext2D;
 
 RenderingContext2D.CompositionMode = {
-/*
-https://en.wikipedia.org/wiki/Alpha_compositing
-https://graphics.pixar.com/library/Compositing/paper.pdf
-op = cA*fA+cB*fB
-operation fA fB?
-clear 0 0
-A 1 0
-B 0 1
-A over B 1 1-aA
-B over A 1-aB 1
-A in B aB 0
-B in A 0 aA
-A out B 1-aB 0
-B out A 0 1-aA
-A atop B aB 1-aA
-B atop A 1-aB aA
-A xor B l-aB 1-aA
-*/
-/*'clear': function(Dca, Da, Sca, Sa){return 0;},
-'copy': function(Dca, Da, Sca, Sa){return Sca;},*/
+//https://graphics.pixar.com/library/Compositing/paper.pdf
 'xor': function(Dca, Da, Sca, Sa){return Sca * (1 - Da) + Dca * (1 - Sa);},
 'destination-out': function(Dca, Da, Sca, Sa){return Dca * (1 - Sa);},
 'destination-in': function(Dca, Da, Sca, Sa){return Dca * Sa;},
@@ -770,11 +754,7 @@ A xor B l-aB 1-aA
 'source-in': function(Dca, Da, Sca, Sa){return Sca * Da;},
 'source-atop': function(Dca, Da, Sca, Sa){return Sca * Da + Dca * (1 - Sa);},
 'source-over': function(Dca, Da, Sca, Sa){return Sca + Dca * (1 - Sa);},
-/*
-https://dev.w3.org/SVG/modules/compositing/master/
-Dca' = f(Sc, Dc) × Sa × Da  + Y × Sca × (1-Da)  + Z × Dca × (1-Sa)
-Da'  =         X × Sa × Da  + Y × Sa × (1-Da)   + Z × Da × (1-Sa)
-*/
+//https://dev.w3.org/SVG/modules/compositing/master/
 'multiply': function(Dca, Da, Sca, Sa){return Sca*Dca + Sca*(1 - Da) + Dca*(1 - Sa);},
 'screen': function(Dca, Da, Sca, Sa){return Sca + Dca - Sca * Dca;},
 'overlay': function(Dca, Da, Sca, Sa){return 2*Dca <= Da ? (2*Sca * Dca + Sca * (1 - Da) + Dca * (1 - Sa)) : (Sca * (1 + Da) + Dca * (1 + Sa) - 2 * Dca * Sca - Da * Sa);},
@@ -791,30 +771,6 @@ RenderingContext2D.CompositionMode['hardlight'] = RenderingContext2D.Composition
 RenderingContext2D.CompositionMode['softlight'] = RenderingContext2D.CompositionMode['soft-light'];
 
 RenderingContext2D.Interpolation = {
-/*'nearest': function(im, w, h, nw, nh) {
-    // http://pixinsight.com/doc/docs/InterpolationAlgorithms/InterpolationAlgorithms.html
-    var size = (nw*nh) << 2,
-        interpolated = new ImArray(size),
-        rx = (w-1)/nw, ry = (h-1)/nh,
-        i, j, x, y, xi, yi, pixel, index,
-        yw, xoff, yoff, w4 = w << 2
-    ;
-    i=0; j=0; x=0; y=0; yi=0; yw=0; yoff=0;
-    for (index=0; index<size; index+=4,++j,x+=rx)
-    {
-        if (j >= nw) {j=0; x=0; ++i; y+=ry; yi=y|0; yw=yi*w; yoff=y - (yi<0.5 ? 0 : w4);}
-
-        xi = x|0; xoff = x - (xi<0.5 ? 0 : 4);
-
-        pixel = ((yw + xi)<<2) + xoff + yoff;
-
-        interpolated[index  ]    = im[pixel  ];
-        interpolated[index+1]    = im[pixel+1];
-        interpolated[index+2]    = im[pixel+2];
-        interpolated[index+3]    = im[pixel+3];
-    }
-    return interpolated;
-},*/
 'bilinear': function(im, w, h, nw, nh) {
     // http://pixinsight.com/doc/docs/InterpolationAlgorithms/InterpolationAlgorithms.html
     // http://tech-algorithm.com/articles/bilinear-image-scaling/
@@ -855,225 +811,7 @@ RenderingContext2D.Interpolation = {
         interpolated[index+3] = clamp(stdMath.round(A*a +  B*b + C*c  +  D*d), 0, 255);
     }
     return interpolated;
-}/*,
-'bicubic': function(im, w, h, nw, nh) {
-    var size = (nw*nh) << 2,
-        interpolated = new ImArray(size),
-        rx = (w-1)/nw, ry = (h-1)/nh,
-        i, j, x, y, xi, yi, pixel, index,
-        rgbaR = 0, rgbaG = 0, rgbaB = 0, rgbaA = 0,
-        rgba0R = 0, rgba0G = 0, rgba0B = 0, rgba0A = 0,
-        rgba1R = 0, rgba1G = 0, rgba1B = 0, rgba1A = 0,
-        rgba2R = 0, rgba2G = 0, rgba2B = 0, rgba2A = 0,
-        rgba3R = 0, rgba3G = 0, rgba3B = 0, rgba3A = 0,
-        yw, dx, dy, dx2, dx3, dy2, dy3, w4 = w << 2,
-        h_1 = h-1, w_1 = w-1,
-        B0, B1, B2, B3,
-        BL0, BL1, BL2, BL3,
-        BR0, BR1, BR2, BR3,
-        BRR0, BRR1, BRR2, BRR3,
-        BB0, BB1, BB2, BB3,
-        BBL0, BBL1, BBL2, BBL3,
-        BBR0, BBR1, BBR2, BBR3,
-        BBRR0, BBRR1, BBRR2, BBRR3,
-        C0, C1, C2, C3,
-        L0, L1, L2, L3,
-        R0, R1, R2, R3,
-        RR0, RR1, RR2, RR3,
-        T0, T1, T2, T3,
-        TL0, TL1, TL2, TL3,
-        TR0, TR1, TR2, TR3,
-        TRR0, TRR1, TRR2, TRR3,
-        p, q, r, s, T_EDGE, B_EDGE, L_EDGE, R_EDGE
-    ;
-    i=0; j=0; x=0; y=0; yi=0; yw=0; dy=dy2=dy3=0;
-    for (index=0; index<size; index+=4,++j,x+=rx)
-    {
-        if (j >= nw) {j=0; x=0; ++i; y+=ry; yi=y|0; dy=y - yi; dy2=dy*dy; dy3=dy2*dy3; yw=yi*w;}
-        xi = x|0; dx = x - xi; dx2 = dx*dx; dx3 = dx2*dx;
-
-        pixel = (yw + xi) << 2;
-        T_EDGE = 0 === yi; B_EDGE = h_1 === yi; L_EDGE = 0 === xi; R_EDGE = w_1 === xi;
-
-        // handle edge cases
-        C0 = im[pixel+0];
-        C1 = im[pixel+1];
-        C2 = im[pixel+2];
-        C3 = im[pixel+3];
-        L0 = L_EDGE ? C0 : im[pixel-4+0];
-        L1 = L_EDGE ? C1 : im[pixel-4+1];
-        L2 = L_EDGE ? C2 : im[pixel-4+2];
-        L3 = L_EDGE ? C3 : im[pixel-4+3];
-        R0 = R_EDGE ? C0 : im[pixel+4+0];
-        R1 = R_EDGE ? C1 : im[pixel+4+1];
-        R2 = R_EDGE ? C2 : im[pixel+4+2];
-        R3 = R_EDGE ? C3 : im[pixel+4+3];
-        RR0 = R_EDGE ? C0 : im[pixel+8+0];
-        RR1 = R_EDGE ? C1 : im[pixel+8+1];
-        RR2 = R_EDGE ? C2 : im[pixel+8+2];
-        RR3 = R_EDGE ? C3 : im[pixel+8+3];
-        B0 = B_EDGE ? C0 : im[pixel+w4+0];
-        B1 = B_EDGE ? C1 : im[pixel+w4+1];
-        B2 = B_EDGE ? C2 : im[pixel+w4+2];
-        B3 = B_EDGE ? C3 : im[pixel+w4+3];
-        BB0 = B_EDGE ? C0 : im[pixel+w4+w4+0];
-        BB1 = B_EDGE ? C1 : im[pixel+w4+w4+1];
-        BB2 = B_EDGE ? C2 : im[pixel+w4+w4+2];
-        BB3 = B_EDGE ? C3 : im[pixel+w4+w4+3];
-        BL0 = B_EDGE||L_EDGE ? C0 : im[pixel+w4-4+0];
-        BL1 = B_EDGE||L_EDGE ? C1 : im[pixel+w4-4+1];
-        BL2 = B_EDGE||L_EDGE ? C2 : im[pixel+w4-4+2];
-        BL3 = B_EDGE||L_EDGE ? C3 : im[pixel+w4-4+3];
-        BR0 = B_EDGE||R_EDGE ? C0 : im[pixel+w4+4+0];
-        BR1 = B_EDGE||R_EDGE ? C1 : im[pixel+w4+4+1];
-        BR2 = B_EDGE||R_EDGE ? C2 : im[pixel+w4+4+2];
-        BR3 = B_EDGE||R_EDGE ? C3 : im[pixel+w4+4+3];
-        BRR0 = B_EDGE||R_EDGE ? C0 : im[pixel+w4+8+0];
-        BRR1 = B_EDGE||R_EDGE ? C1 : im[pixel+w4+8+1];
-        BRR2 = B_EDGE||R_EDGE ? C2 : im[pixel+w4+8+2];
-        BRR3 = B_EDGE||R_EDGE ? C3 : im[pixel+w4+8+3];
-        BBL0 = B_EDGE||L_EDGE ? C0 : im[pixel+w4+w4-4+0];
-        BBL1 = B_EDGE||L_EDGE ? C1 : im[pixel+w4+w4-4+1];
-        BBL2 = B_EDGE||L_EDGE ? C2 : im[pixel+w4+w4-4+2];
-        BBL3 = B_EDGE||L_EDGE ? C3 : im[pixel+w4+w4-4+3];
-        BBR0 = B_EDGE||R_EDGE ? C0 : im[pixel+w4+w4+4+0];
-        BBR1 = B_EDGE||R_EDGE ? C1 : im[pixel+w4+w4+4+1];
-        BBR2 = B_EDGE||R_EDGE ? C2 : im[pixel+w4+w4+4+2];
-        BBR3 = B_EDGE||R_EDGE ? C3 : im[pixel+w4+w4+4+3];
-        BBRR0 = B_EDGE||R_EDGE ? C0 : im[pixel+w4+w4+8+0];
-        BBRR1 = B_EDGE||R_EDGE ? C1 : im[pixel+w4+w4+8+1];
-        BBRR2 = B_EDGE||R_EDGE ? C2 : im[pixel+w4+w4+8+2];
-        BBRR3 = B_EDGE||R_EDGE ? C3 : im[pixel+w4+w4+8+3];
-        T0 = T_EDGE ? C0 : im[pixel-w4+0];
-        T1 = T_EDGE ? C1 : im[pixel-w4+1];
-        T2 = T_EDGE ? C2 : im[pixel-w4+2];
-        T3 = T_EDGE ? C3 : im[pixel-w4+3];
-        TL0 = T_EDGE||L_EDGE ? C0 : im[pixel-w4-4+0];
-        TL1 = T_EDGE||L_EDGE ? C1 : im[pixel-w4-4+1];
-        TL2 = T_EDGE||L_EDGE ? C2 : im[pixel-w4-4+2];
-        TL3 = T_EDGE||L_EDGE ? C3 : im[pixel-w4-4+3];
-        TR0 = T_EDGE||R_EDGE ? C0 : im[pixel-w4+4+0];
-        TR1 = T_EDGE||R_EDGE ? C1 : im[pixel-w4+4+1];
-        TR2 = T_EDGE||R_EDGE ? C2 : im[pixel-w4+4+2];
-        TR3 = T_EDGE||R_EDGE ? C3 : im[pixel-w4+4+3];
-        TRR0 = T_EDGE||R_EDGE ? C0 : im[pixel-w4+8+0];
-        TRR1 = T_EDGE||R_EDGE ? C1 : im[pixel-w4+8+1];
-        TRR2 = T_EDGE||R_EDGE ? C2 : im[pixel-w4+8+2];
-        TRR3 = T_EDGE||R_EDGE ? C3 : im[pixel-w4+8+3];
-
-        p = (TRR0 - TR0) - (TL0 - T0);
-        q = (TL0 - T0) - p;
-        r = TR0 - TL0;
-        s = T0;
-        rgba0R = p * dx3 + q * dx2 + r * dx + s;
-        p = (TRR1 - TR1) - (TL1 - T1);
-        q = (TL1 - T1) - p;
-        r = TR1 - TL1;
-        s = T1;
-        rgba0G = p * dx3 + q * dx2 + r * dx + s;
-        p = (TRR2 - TR2) - (TL2 - T2);
-        q = (TL2 - T2) - p;
-        r = TR2 - TL2;
-        s = T2;
-        rgba0B = p * dx3 + q * dx2 + r * dx + s;
-        p = (TRR3 - TR3) - (TL3 - T3);
-        q = (TL3 - T3) - p;
-        r = TR3 - TL3;
-        s = T3;
-        rgba0A = p * dx3 + q * dx2 + r * dx + s;
-
-        p = (RR0 - R0) - (L0 - C0);
-        q = (L0 - C0) - p;
-        r = R0 - L0;
-        s = C0;
-        rgba1R = p * dx3 + q * dx2 + r * dx + s;
-        p = (RR1 - R1) - (L1 - C1);
-        q = (L1 - C1) - p;
-        r = R1 - L1;
-        s = C1;
-        rgba1G = p * dx3 + q * dx2 + r * dx + s;
-        p = (RR2 - R2) - (L2 - C2);
-        q = (L2 - C2) - p;
-        r = R2 - L2;
-        s = C2;
-        rgba1B = p * dx3 + q * dx2 + r * dx + s;
-        p = (RR3 - R3) - (L3 - C3);
-        q = (L3 - C3) - p;
-        r = R3 - L3;
-        s = C3;
-        rgba1A = p * dx3 + q * dx2 + r * dx + s;
-
-        p = (BRR0 - BR0) - (BL0 - B0);
-        q = (BL0 - B0) - p;
-        r = BR0 - BL0;
-        s = B0;
-        rgba2R = p * dx3 + q * dx2 + r * dx + s;
-        p = (BRR1 - BR1) - (BL1 - B1);
-        q = (BL1 - B1) - p;
-        r = BR1 - BL1;
-        s = B1;
-        rgba2G = p * dx3 + q * dx2 + r * dx + s;
-        p = (BRR2 - BR2) - (BL2 - B2);
-        q = (BL2 - B2) - p;
-        r = BR2 - BL2;
-        s = B2;
-        rgba2B = p * dx3 + q * dx2 + r * dx + s;
-        p = (BRR3 - BR3) - (BL3 - B3);
-        q = (BL3 - B3) - p;
-        r = BR3 - BL3;
-        s = B3;
-        rgba2A = p * dx3 + q * dx2 + r * dx + s;
-
-        p = (BBRR0 - BBR0) - (BBL0 - BB0);
-        q = (BBL0 - BB0) - p;
-        r = BBR0 - BBL0;
-        s = BB0;
-        rgba3R = p * dx3 + q * dx2 + r * dx + s;
-        p = (BBRR1 - BBR1) - (BBL1 - BB1);
-        q = (BBL1 - BB1) - p;
-        r = BBR1 - BBL1;
-        s = BB1;
-        rgba3G = p * dx3 + q * dx2 + r * dx + s;
-        p = (BBRR2 - BBR2) - (BBL2 - BB2);
-        q = (BBL2 - BB2) - p;
-        r = BBR2 - BBL2;
-        s = BB2;
-        rgba3B = p * dx3 + q * dx2 + r * dx + s;
-        p = (BBRR3 - BBR3) - (BBL3 - BB3);
-        q = (BBL3 - BB3) - p;
-        r = BBR3 - BBL3;
-        s = BB3;
-        rgba3A = p * dx3 + q * dx2 + r * dx + s;
-
-        // Then we interpolate those 4 pixels to get a single pixel that is a composite of 4 * 4 pixels, 16 pixels
-        p = (rgba3R - rgba2R) - (rgba0R - rgba1R);
-        q = (rgba0R - rgba1R) - p;
-        r = rgba2R - rgba0R;
-        s = rgba1R;
-        rgbaR = clamp(stdMath.round(p * dy3 + q * dy2 + r * dy + s), 0, 255);
-        p = (rgba3G - rgba2G) - (rgba0G - rgba1G);
-        q = (rgba0G - rgba1G) - p;
-        r = rgba2G - rgba0G;
-        s = rgba1G;
-        rgbaG = clamp(stdMath.round(p * dy3 + q * dy2 + r * dy + s), 0, 255);
-        p = (rgba3B - rgba2B) - (rgba0B - rgba1B);
-        q = (rgba0B - rgba1B) - p;
-        r = rgba2B - rgba0B;
-        s = rgba1B;
-        rgbaB = clamp(stdMath.round(p * dy3 + q * dy2 + r * dy + s), 0, 255);
-        p = (rgba3A - rgba2A) - (rgba0A - rgba1A);
-        q = (rgba0A - rgba1A) - p;
-        r = rgba2A - rgba0A;
-        s = rgba1A;
-        rgbaA = clamp(stdMath.round(p * dy3 + q * dy2 + r * dy + s), 0, 255);
-
-        interpolated[index]      = rgbaR;
-        interpolated[index+1]    = rgbaG;
-        interpolated[index+2]    = rgbaB;
-        interpolated[index+3]    = rgbaA;
-    }
-    return interpolated;
-}*/
+}
 };
 function Path2D(transform)
 {
@@ -1384,6 +1122,7 @@ Path2D[PROTO] = {
     constructor: Path2D,
     _d: null,
     _sd: null,
+    transform: null,
     dispose: null,
     addPath: null,
     moveTo: null,
@@ -2277,15 +2016,25 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
 }
 function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, dy2, wx2, wy2, j, ml, xmin, ymin, xmax, ymax)
 {
-    if (is_almost_equal(dy1*dx2, dy2*dx1, 1e-6)) return;
+    var sx1 = x1 > x2 ? -1 : 1,
+        sy1 = y1 > y2 ? -1 : 1,
+        sx2 = x2 > x3 ? -1 : 1,
+        sy2 = y2 > y3 ? -1 : 1,
+        wsx1, wsy1,
+        wsx2, wsy2,
+        a1, b1,
+        c1, d1,
+        a2, b2,
+        c2, d2,
+        p, q,
+        p0, q0,
+        t, s,
+        mitl, lw;
 
-    var sx1, sy1, sx2, sy2,
-        wsx1, wsy1, wsx2, wsy2,
-        a1, b1, c1, d1,
-        a2, b2, c2, d2,
-        p, q, t, s, mitl, lw;
+    // no join needed, 2-3 is a continuation of 1-2 along same line
+    if (is_almost_equal(sy1*dy1*sx2*dx2, sy2*dy2*sx1*dx1, 1e-6)) return;
 
-    if (x1 > x2 && x2 > x3)
+    /*if (x1 > x2 && x2 > x3)
     {
         t = x1;
         x1 = x3;
@@ -2305,7 +2054,7 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
         t = wy1;
         wy1 = wy2;
         wy2 = t;
-    }
+    }*/
 
     sx1 = x1 > x2 ? -1 : 1;
     sy1 = y1 > y2 ? -1 : 1;
@@ -2325,11 +2074,70 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
     d2 = {x:x3 + wsx2, y:y3 - wsy2};
     s = {x:x2, y:y2};
 
-    if (sx1 === sx2)
+    // FIX: FAILS IN SOME CASES TO FIND CORRECT p,q points
+    if (sy1*dy1*sx2*dx2 > sy2*dy2*sx1*dx1)
+    {
+        if (sx1*sy2 === sx2*sy1)
+        {
+            if (0 > sx1*sy2)
+            {
+                p = d1;
+                q = b2;
+            }
+            else
+            {
+                p = c1;
+                q = a2;
+            }
+        }
+        else
+        {
+            if (0 > sx1*sy2)
+            {
+                p = c1;
+                q = b2;
+            }
+            else
+            {
+                p = d1;
+                q = a2;
+            }
+        }
+    }
+    else
+    {
+        if (sx1*sy2 === sx2*sy1)
+        {
+            if (0 > sx1*sy2)
+            {
+                p = c1;
+                q = a2;
+            }
+            else
+            {
+                p = d1;
+                q = b2;
+            }
+        }
+        else
+        {
+            if (0 > sx1*sy2)
+            {
+                p = c1;
+                q = b2;
+            }
+            else
+            {
+                p = d1;
+                q = a2;
+            }
+        }
+    }
+    /*if (sx1 === sx2)
     {
         if (sy1 === sy2)
         {
-            if (is_strictly_equal(dy1, 0))
+            if ((0 > sy1) || is_strictly_equal(dy1, 0))
             {
                 p = d1;
                 q = b2;
@@ -2348,9 +2156,25 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
     }
     else //if (sx1 !== sx2)
     {
-        p = d1;
-        q = a2;
-    }
+        if (sy1 === sy2)
+        {
+            if (dy1 < dy2)
+            {
+                p = d1;
+                q = a2;
+            }
+            else
+            {
+                p = d1;
+                q = a2;
+            }
+        }
+        else
+        {
+            p = d1;
+            q = b2;
+        }
+    }*/
     if ('bevel' === j)
     {
         wu_line(set_pixel, p.x, p.y, q.x, q.y, null, null, 1, xmin, ymin, xmax, ymax);
@@ -2358,28 +2182,9 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
     }
     else
     {
-        if (sx1 === sx2)
-        {
-            if (sy1 === sy2)
-            {
-                if (is_strictly_equal(dy1, 0))
-                {
-                    t = intersect(b1.x, b1.y, d1.x, d1.y, b2.x, b2.y, d2.x, d2.y);
-                }
-                else
-                {
-                    t = intersect(a1.x, a1.y, c1.x, c1.y, a2.x, a2.y, c2.x, c2.y);
-                }
-            }
-            else
-            {
-                t = intersect(a1.x, a1.y, c1.x, c1.y, b2.x, b2.y, d2.x, d2.y);
-            }
-        }
-        else //if (sx1 !== sx2)
-        {
-            t = intersect(b1.x, b1.y, d1.x, d1.y, a2.x, a2.y, c2.x, c2.y);
-        }
+        p0 = p === d1 ? b1 : a1;
+        q0 = q === b2 ? d2 : c2;
+        t = intersect(p0.x, p0.y, p.x, p.y, q.x, q.y, q0.x, q0.y);
         mitl = hypot(t.x - s.x, t.y - s.y);
         lw = stdMath.max(hypot(wx1, wy1), hypot(wx2, wy2));
         if ('round' === j)
