@@ -10,6 +10,8 @@ Rasterize, stroke and fill lines, rectangles, curves and paths. Even without can
 2. `strokeText`/`fillText`/`measureText` ..  (will **not** be implemented but can be done by drawing the actual curves in the font)
 3. `shadow`/`shadowBlur`/`shadowColor` .. (will **not** be implemented but is easy to do)
 
+**note:** taking account of scaling in setting `lineWidth` needs some further work.
+
 **see also:**
 
 * [Rasterizer](https://github.com/foo123/Rasterizer) stroke and fill lines, rectangles, curves and paths, without canvas.
