@@ -2,7 +2,7 @@
 
 Rasterize, stroke and fill lines, rectangles, curves and paths. Even without canvas.
 
-**version: 0.9.9** (29 kB minified)
+**version: 0.9.91** (32 kB minified)
 
 **What is not supported:**
 

@@ -2,7 +2,7 @@
 *   Rasterizer
 *   rasterize, stroke and fill lines, rectangles, curves and paths
 *
-*   @version 0.9.9
+*   @version 0.9.91
 *   https://github.com/foo123/Rasterizer
 *
 **/
@@ -25,7 +25,10 @@ var def = Object.defineProperty, PROTO = 'prototype',
     PI = stdMath.PI, TWO_PI = 2*PI, HALF_PI = PI/2,
     NUM_POINTS = 6, MIN_LEN = sqrt2, PIXEL_SIZE = 0.5,
     ImArray = 'undefined' !== typeof Uint8ClampedArray ? Uint8ClampedArray : ('undefined' !== typeof Uint8Array ? Uint8Array : Array),
-    BLANK = [0, 0, 0, 0];
+    BLANK = [0, 0, 0, 0],
+    COMMAND = /[MLHVCSQTAZ]/gi,
+    NUMBER = /-?(?:(?:\d+\.\d+)|(?:\.\d+)|(?:\d+))/g
+;
 
 function Rasterizer(width, height, set_rgba_at, get_rgba_from)
 {
@@ -54,7 +57,7 @@ function Rasterizer(width, height, set_rgba_at, get_rgba_from)
         err('Unsupported context "'+type+'"');
     };
 }
-Rasterizer.VERSION = '0.9.9';
+Rasterizer.VERSION = '0.9.91';
 Rasterizer[PROTO] = {
     constructor: Rasterizer,
     width: null,
@@ -810,9 +813,8 @@ RenderingContext2D.Interpolation = {
     return interpolated;
 }
 };
-function Path2D(transform)
+function Path2D(path, transform)
 {
-    transform = transform || Matrix2D.EYE();
     var self = this, need_new_subpath = true, d = [], sd = null;
 
     def(self, 'transform', {
@@ -832,7 +834,7 @@ function Path2D(transform)
     });
     def(self, '_sd', {
         get: function() {
-            if (!sd) sd = path_to_segments(d).sort(asc);
+            if (!sd) sd = path_to_segments(d);
             return sd;
         },
         set: function(_sd) {
@@ -1106,6 +1108,25 @@ function Path2D(transform)
         d = null;
         sd = null;
     };
+
+    if (1 === arguments.length)
+    {
+        if (path instanceof Matrix2D)
+        {
+            transform = path;
+            path = null;
+        }
+        else
+        {
+            transform = null;
+        }
+    }
+    transform = transform || Matrix2D.EYE();
+    if (path)
+    {
+        if (path instanceof Path2D) d.push.apply(d, path._d);
+        else parse_path(path, self);
+    }
 }
 Path2D[PROTO] = {
     constructor: Path2D,
@@ -1688,7 +1709,7 @@ function fill_sector(set_pixel, ax, ay, bx, by, px, py, r, xmin, ymin, xmax, yma
     m = p.length - 2;
     // outline of sector
     for (i=0; i<m; i+=2) wu_line(set_pixel, p[i], p[i+1], p[i+2], p[i+3], null, null, 1, xmin, ymin, xmax, ymax);
-    p = path_to_segments([p]).sort(asc);
+    p = path_to_segments([p]);
     y = stdMath.round(stdMath.min(ay, by, py, p.ymin));
     yy = stdMath.round(stdMath.max(ay, by, py, p.ymax));
     if (clip)
@@ -2103,7 +2124,7 @@ function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, 
         q0 = q === b2 ? d2 : c2;
         t = intersect(p0.x, p0.y, p.x, p.y, q.x, q.y, q0.x, q0.y);
         mitl = hypot(t.x - s.x, t.y - s.y);
-        lw = stdMath.max(hypot(wx1, wy1), hypot(wx2, wy2));
+        lw = stdMath.min(hypot(wx1, wy1), hypot(wx2, wy2));
         if ('round' === j)
         {
             t = {x:s.x + lw*(t.x - s.x)/mitl, y:s.y + lw*(t.y - s.y)/mitl};
@@ -2541,104 +2562,50 @@ function point_in_path(x, y, path, rule)
 }
 
 // utilities -----------------------
-function hypot(dx, dy)
-{
-    dx = stdMath.abs(dx);
-    dy = stdMath.abs(dy);
-    var r = 0;
-    if (is_strictly_equal(dx, 0))
-    {
-        return dy;
-    }
-    else if (is_strictly_equal(dy, 0))
-    {
-        return dx;
-    }
-    else if (dx > dy)
-    {
-        r = dy/dx;
-        return dx*stdMath.sqrt(1 + r*r);
-    }
-    else if (dx < dy)
-    {
-        r = dx/dy;
-        return dy*stdMath.sqrt(1 + r*r);
-    }
-    return dx*sqrt2;
-}
-function wn(x, y, x1, y1, x2, y2)
-{
-    // orientation winding number
-    return 0 > (x - x1)*(y2 - y1) - (x2 - x1)*(y - y1) ? -1 : 1;
-}
-function point_line_distance(x, y, x1, y1, x2, y2)
-{
-    var dx = x2 - x1,
-        dy = y2 - y1,
-        d = hypot(dx, dy)
-    ;
-    if (is_strictly_equal(d, 0)) return hypot(x - x1, y - y1);
-    return stdMath.abs(dx*(y1 - y) - dy*(x1 - x)) / d;
-}
-function point_line_project(x, y, x1, y1, x2, y2)
-{
-    var dx = x2 - x1,
-        dy = y2 - y1,
-        dxp = x - x1,
-        dyp = y - y1,
-        d = dx*dxp + dy*dyp,
-        l = hypot(dx, dy),
-        lp = hypot(dxp, dyp),
-        ll = d / l;
-    return [x1 + ll * dx / l, y1 + ll * dy / l];
-}
 function path_to_segments(polylines)
 {
     if (!polylines) return [];
     var segments = [],
         m = polylines.length,
-        n, i, j, k, l, h = 0, p,
-        ymin = INF, ymax = -INF/*,
-        count = function(p, n, i) {
-            var h = 0;
-            if (p[i].params && p[i].params.type) {++h; i+=2;}
-            for (; i<n; i+=2)
-            {
-                if (p[i].params && p[i].params.type) return h;
-                ++h;
-            }
-            return h;
-        }*/;
+        n, i, j, k, l, h, p,
+        ymin = INF, ymax = -INF;
     for (k=0,l=0,j=0; j<m; ++j)
     {
         p = polylines[j];
         if (!p) continue;
         n = p.length - 2;
         if (0 >= n) continue;
-        ++k; l = 1; //h = count(p, n, 0);
+        ++k; l = 1; h = -1;
         for (i=0; i<n; i+=2)
         {
             if (p[i].params && p[i].params.type)
             {
+                if ((0 <= h) && segments.length)
+                {
+                    // relate start and end of curve segments
+                    segments[h][7] = segments[h+l-2][6] + 1;
+                    segments[h+l-2][7] = segments[h][6] + 1;
+                }
                 ++k;
                 l = 1;
-                //h = count(p, n, i);
+                h = segments.length;
             }
             ymin = stdMath.min(ymin, p[i+1]);
             ymax = stdMath.max(ymax, p[i+1]);
             if (p[i+1] > p[i+3])
             {
-                segments.push([+p[i+2], p[i+3], +p[i], p[i+1], -1, k, l, h, 0, 0]);
+                segments.push([+p[i+2], p[i+3], +p[i], p[i+1], -1, k, l, l, 0, 0]);
             }
             else
             {
-                segments.push([+p[i], p[i+1], +p[i+2], p[i+3], 1, k, l, h, 0, 0]);
+                segments.push([+p[i], p[i+1], +p[i+2], p[i+3], 1, k, l, l, 0, 0]);
             }
             ++l;
         }
         ymin = stdMath.min(ymin, p[n+1]);
         ymax = stdMath.max(ymax, p[n+1]);
     }
+    segments = segments.sort(asc);
     segments.ymin = ymin;
     segments.ymax = ymax;
     return segments;
@@ -2653,14 +2620,15 @@ function redundant(edg, n, y)
         for (j=i+1; j<n; ++j)
         {
             f = edg[j];
-            if (f[9] || (e[4] !== f[4]) || (e[5] !== f[5]) || (1 < stdMath.abs((e[6]/* % e[7]*/) - (f[6]/* % f[7]*/)))) continue;
+            if (f[9] || (e[4] !== f[4]) || (e[5] !== f[5])
+                || ((1 < stdMath.abs(e[6] - f[6])) && (1 < stdMath.abs(e[7] - f[7])))) continue;
             if (
                 (is_almost_equal(e[0], f[0], 1e-5)
                 && is_almost_equal(e[1], f[1], 1e-5)
                 && is_almost_equal(e[2], f[2], 1e-5)
                 && is_almost_equal(e[3], f[3], 1e-5))
-                || (is_almost_equal(e[3], f[1], 1e-6))
-                || (is_almost_equal(e[1], f[3], 1e-6))
+                || is_almost_equal(e[3], f[1], 1e-6)
+                || is_almost_equal(e[1], f[3], 1e-6)
             )
             {
                 f[9] = 1;
@@ -2712,6 +2680,311 @@ function subdivide_curve(points, f, l, r, left, right)
     }
     return right;
 }
+function parse_path(d, path)
+{
+    var c = trim(String(d)).match(COMMAND),
+        p = d.split(COMMAND),
+        curr = [0, 0], start = [curr[0], curr[1]], prev;
+    c && c.forEach(function(c, i) {
+        var isRelative = c === c.toLowerCase(),
+            pp = (trim(p[i+1] || '').match(NUMBER) || []).map(parse_number),
+            p1, p2, p3, p4, tmp, implicitLine;
+        switch (c.toUpperCase())
+        {
+            case 'M':
+            implicitLine = false;
+            while (2 <= pp.length)
+            {
+                if (implicitLine)
+                {
+                    p1 = [curr[0], curr[1]];
+                    p2 = [
+                    (isRelative ? p1[0] : 0) + pp.shift(),
+                    (isRelative ? p1[1] : 0) + pp.shift(),
+                    ];
+                    curr[0] = p2[0];
+                    curr[1] = p2[1];
+                    path.lineTo(curr[0], curr[1]);
+                }
+                else
+                {
+                    curr[0] = (isRelative ? curr[0] : 0) + pp.shift();
+                    curr[1] = (isRelative ? curr[1] : 0) + pp.shift();
+                    start = [curr[0], curr[1]];
+                    path.moveTo(curr[0], curr[1]);
+                }
+                implicitLine = true;
+            }
+            prev = null;
+            break;
+            case 'H':
+            while (1 <= pp.length)
+            {
+                p1 = [curr[0], curr[1]];
+                p2 = [
+                (isRelative ? p1[0] : 0) + pp.shift(),
+                p1[1]
+                ];
+                curr[0] = p2[0];
+                curr[1] = p2[1];
+                path.lineTo(curr[0], curr[1]);
+            }
+            prev = null;
+            break;
+            case 'V':
+            while (1 <= pp.length)
+            {
+                p1 = [curr[0], curr[1]];
+                p2 = [
+                p1[0],
+                (isRelative ? p1[1] : 0) + pp.shift()
+                ];
+                curr[0] = p2[0];
+                curr[1] = p2[1];
+                path.lineTo(curr[0], curr[1]);
+            }
+            prev = null;
+            break;
+            case 'L':
+            while (2 <= pp.length)
+            {
+                p1 = [curr[0], curr[1]];
+                p2 = [
+                (isRelative ? p1[0] : 0) + pp.shift(),
+                (isRelative ? p1[1] : 0) + pp.shift()
+                ];
+                curr[0] = p2[0];
+                curr[1] = p2[1];
+                path.lineTo(curr[0], curr[1]);
+            }
+            prev = null;
+            break;
+            case 'A':
+            while (7 <= pp.length)
+            {
+                tmp = {
+                    start: null,
+                    end: null,
+                    radiusX: pp.shift(),
+                    radiusY: pp.shift(),
+                    angle: pp.shift(),
+                    largeArc: pp.shift(),
+                    sweep: pp.shift()
+                };
+                p1 = [curr[0], curr[1]];
+                p2 = [
+                (isRelative ? p1[0] : 0) + pp.shift(),
+                (isRelative ? p1[1] : 0) + pp.shift()
+                ];
+                curr[0] = p2[0];
+                curr[1] = p2[1];
+                tmp.start = p1;
+                tmp.end = p2;
+                path.ellipse.apply(path, svgarc2ellipse(tmp.start[0], tmp.start[1], tmp.end[0], tmp.end[1], tmp.largeArc, tmp.sweep, tmp.radiusX, tmp.radiusY, tmp.angle));
+            }
+            prev = null;
+            break;
+            case 'Q':
+            while (4 <= pp.length)
+            {
+                p1 = [curr[0], curr[1]];
+                p2 = [
+                (isRelative ? p1[0] : 0) + pp.shift(),
+                (isRelative ? p1[1] : 0) + pp.shift()
+                ];
+                p3 = [
+                (isRelative ? p1[0] : 0) + pp.shift(),
+                (isRelative ? p1[1] : 0) + pp.shift()
+                ];
+                curr[0] = p3[0];
+                curr[1] = p3[1];
+                path.quadraticCurveTo(p2[0], p2[1], p3[0], p3[1]);
+                prev = ['Q', p1, p2, p3];
+            }
+            break;
+            case 'T':
+            while (2 <= pp.length)
+            {
+                p1 = [curr[0], curr[1]];
+                p3 = [
+                (isRelative ? p1[0] : 0) + pp.shift(),
+                (isRelative ? p1[1] : 0) + pp.shift()
+                ];
+                p2 = prev && 'Q' === prev[0] ? [
+                2*p1[0] - prev[2][0],
+                2*p1[1] - prev[2][1],
+                ] : [p1[0], p1[1]];
+                curr[0] = p3[0];
+                curr[1] = p3[1];
+                path.quadraticCurveTo(p2[0], p2[1], p3[0], p3[1]);
+                prev = ['Q', p1, p2, p3];
+            }
+            break;
+            case 'C':
+            while (6 <= pp.length)
+            {
+                p1 = [curr[0], curr[1]];
+                p2 = [
+                (isRelative ? p1[0] : 0) + pp.shift(),
+                (isRelative ? p1[1] : 0) + pp.shift()
+                ];
+                p3 = [
+                (isRelative ? p1[0] : 0) + pp.shift(),
+                (isRelative ? p1[1] : 0) + pp.shift()
+                ];
+                p4 = [
+                (isRelative ? p1[0] : 0) + pp.shift(),
+                (isRelative ? p1[1] : 0) + pp.shift()
+                ];
+                curr[0] = p4[0];
+                curr[1] = p4[1];
+                path.bezierCurveTo(p2[0], p2[1], p3[0], p3[1], p4[0], p4[1]);
+                prev = ['C', p1, p2, p3, p4];
+            }
+            break;
+            case 'S':
+            while (4 <= pp.length)
+            {
+                p1 = [curr[0], curr[1]];
+                p3 = [
+                (isRelative ? p1[0] : 0) + pp.shift(),
+                (isRelative ? p1[1] : 0) + pp.shift()
+                ];
+                p4 = [
+                (isRelative ? p1[0] : 0) + pp.shift(),
+                (isRelative ? p1[1] : 0) + pp.shift()
+                ];
+                p2 = prev && 'C' === prev[0] ? [
+                2*p1[0] - prev[3][0],
+                2*p1[1] - prev[3][1],
+                ] : [p1[0], p1[1]];
+                curr[0] = p4[0];
+                curr[1] = p4[1];
+                path.bezierCurveTo(p2[0], p2[1], p3[0], p3[1], p4[0], p4[1]);
+                prev = ['C', p1, p2, p3, p4];
+            }
+            break;
+            case 'Z':
+            p1 = [curr[0], curr[1]],
+            p2 = [start[0], start[1]];
+            curr[0] = p2[0];
+            curr[1] = p2[1];
+            start = [curr[0], curr[1]];
+            path.lineTo(curr[0], curr[1]);
+            prev = null;
+            break;
+        }
+    });
+}
+function wn(x, y, x1, y1, x2, y2)
+{
+    // orientation winding number
+    return 0 > (x - x1)*(y2 - y1) - (x2 - x1)*(y - y1) ? -1 : 1;
+}
+function hypot(dx, dy)
+{
+    dx = stdMath.abs(dx);
+    dy = stdMath.abs(dy);
+    var r = 0;
+    if (is_strictly_equal(dx, 0))
+    {
+        return dy;
+    }
+    else if (is_strictly_equal(dy, 0))
+    {
+        return dx;
+    }
+    else if (dx > dy)
+    {
+        r = dy/dx;
+        return dx*stdMath.sqrt(1 + r*r);
+    }
+    else if (dx < dy)
+    {
+        r = dx/dy;
+        return dy*stdMath.sqrt(1 + r*r);
+    }
+    return dx*sqrt2;
+}
+function point_line_distance(x, y, x1, y1, x2, y2)
+{
+    var dx = x2 - x1,
+        dy = y2 - y1,
+        d = hypot(dx, dy)
+    ;
+    if (is_strictly_equal(d, 0)) return hypot(x - x1, y - y1);
+    return stdMath.abs(dx*(y1 - y) - dy*(x1 - x)) / d;
+}
+function point_line_project(x, y, x1, y1, x2, y2)
+{
+    var dx = x2 - x1,
+        dy = y2 - y1,
+        dxp = x - x1,
+        dyp = y - y1,
+        d = dx*dxp + dy*dyp,
+        l = hypot(dx, dy),
+        lp = hypot(dxp, dyp),
+        ll = d / l;
+    return [x1 + ll * dx / l, y1 + ll * dy / l];
+}
+function dotp(x1, y1, x2, y2)
+{
+    return x1*x2 + y1*y2;
+}
+function crossp(x1, y1, x2, y2)
+{
+    return x1*y2 - y1*x2;
+}
+function angle(x1, y1, x2, y2)
+{
+    var n1 = hypot(x1, y1), n2 = hypot(x2, y2);
+    if (is_strictly_equal(n1, 0) || is_strictly_equal(n2, 0)) return 0;
+    return stdMath.acos(clamp(dotp(x1/n1, y1/n1, x2/n2, y2/n2), -1, 1));
+}
+function vector_angle(ux, uy, vx, vy)
+{
+    var p = crossp(ux, uy, vx, vy), a = angle(ux, uy, vx, vy);
+    return (0 > p ? -1 : 1)*a;
+}
+function svgarc2ellipse(x1, y1, x2, y2, fa, fs, rx, ry, angle)
+{
+    // Step 1: simplify through translation/rotation
+    var cos = angle ? stdMath.cos(angle) : 1,
+        sin = angle ? stdMath.sin(angle) : 0,
+        x =  cos*(x1 - x2)/2 + sin*(y1 - y2)/2,
+        y = -sin*(x1 - x2)/2 + cos*(y1 - y2)/2,
+        px = x*x, py = y*y, prx = rx*rx, pry = ry*ry,
+        L = px/prx + py/pry;
+
+    // correct out-of-range radii
+    if (L > 1)
+    {
+        L = stdMath.sqrt(L);
+        rx *= L;
+        ry *= L;
+        prx = rx*rx;
+        pry = ry*ry;
+    }
+
+    // Step 2 + 3: compute center
+    var M = stdMath.sqrt(stdMath.abs((prx*pry - prx*py - pry*px)/(prx*py + pry*px)))*(fa === fs ? -1 : 1),
+        _cx = M*rx*y/ry,
+        _cy = -M*ry*x/rx,
+
+        cx = cos*_cx - sin*_cy + (x1 + x2)/2,
+        cy = sin*_cx + cos*_cy + (y1 + y2)/2
+    ;
+
+    // Step 4: compute θ and dθ
+    var theta = cmod(vector_angle(1, 0, (x - _cx)/rx, (y - _cy)/ry)),
+        dtheta = vector_angle((x - _cx)/rx, (y - _cy)/ry, (-x - _cx)/rx, (-y - _cy)/ry);
+    dtheta -= stdMath.floor(dtheta/TWO_PI)*TWO_PI; // % 360
+
+    if (!fs && dtheta > 0) dtheta -= TWO_PI;
+    if (fs && dtheta < 0) dtheta += TWO_PI;
+
+    return [cx, cy, rx, ry, angle, theta, theta+dtheta, !fs];
+}
 function is_almost_equal(a, b, eps)
 {
     return stdMath.abs(a - b) < (eps || 1e-6);
@@ -2740,7 +3013,18 @@ function asc(a, b)
     var d = a[1] - b[1];
     return is_almost_equal(d, 0) ? (a[3] - b[3]) : d;
 }
-function err(msg) {throw new Error(msg);}
+function parse_number(s)
+{
+    return parseFloat(s || '') || 0;
+}
+function trim(s)
+{
+    return s.trim();
+}
+function err(msg)
+{
+    throw new Error(msg);
+}
 function NOOP() {}
 
 // export it

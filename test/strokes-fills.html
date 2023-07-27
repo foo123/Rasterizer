@@ -711,6 +711,35 @@ function clip()
     ctx.fillRect(0, 0, w, h);
     ctx2.putImageData(imData, 0, 0);
 }
+function path()
+{
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+
+    test1.appendChild(text('Path2D'));
+    test2.appendChild(text('Path2D'));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+
+    const ctx1 = canvas1.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
+
+    ctx1.fill(new Path2D("M10 10 h 80 v 80 h -80 Z"));
+
+    const imData = ctx2.getImageData(0, 0, w, h);
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
+    const ctx = r.getContext("2d");
+    ctx.fill(new Rasterizer.RenderingContext2D.Path2D("M10 10 h 80 v 80 h -80 Z"));
+    ctx2.putImageData(imData, 0, 0);
+}
 function test()
 {
 var points = [
@@ -803,6 +832,7 @@ fillGradientDisk(50, 50, 10, 40, 'evenodd', true);
 fillGradientDisk(50, 50, 10, 40, 'nonzero', false);
 fillGradientDisk(50, 50, 10, 40, 'evenodd', false);
 clip();
+path();
 })();
 </script>
 </body></html>
