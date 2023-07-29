@@ -2,7 +2,7 @@
 
 Rasterize, stroke and fill lines, rectangles, curves and paths. Even without canvas.
 
-**version: 0.9.91** (32 kB minified)
+**version: 0.9.92** (33 kB minified)
 
 **What is not supported:**
 
@@ -10,7 +10,7 @@ Rasterize, stroke and fill lines, rectangles, curves and paths. Even without can
 2. `strokeText`/`fillText`/`measureText` ..  (will **not** be implemented but can be done by drawing the actual curves in the font)
 3. `shadow`/`shadowBlur`/`shadowColor` .. (will **not** be implemented but is easy to do)
 
-**note:** taking account of current scaling in using `lineWidth` needs some further work.
+**note:** extreme unequal scaling (eg `scale_x >> scale_y`) produces some artifacts
 
 **see also:**
 

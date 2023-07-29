@@ -2,7 +2,7 @@
 *   Rasterizer
 *   rasterize, stroke and fill lines, rectangles, curves and paths
 *
-*   @version 0.9.91
+*   @version 0.9.92
 *   https://github.com/foo123/Rasterizer
 *
 **/
@@ -57,7 +57,7 @@ function Rasterizer(width, height, set_rgba_at, get_rgba_from)
         err('Unsupported context "'+type+'"');
     };
 }
-Rasterizer.VERSION = '0.9.91';
+Rasterizer.VERSION = '0.9.92';
 Rasterizer[PROTO] = {
     constructor: Rasterizer,
     width: null,
@@ -1074,7 +1074,7 @@ function Path2D(path, transform)
         }
         var y0 = d[d.length-1].pop(),
             x0 = +d[d.length-1].pop();
-        p = bezier_points([x0, y0, p[0], p[1], p[2], p[3]]);
+        p = bezier_points([x0, y0, p[0], p[1], p[2], p[3]], transform);
         p[0] = new Marker(+p[0], {type:'bezier', lineCap:true, lineJoin:'bevel'});
         p[p.length-2] = new Marker(+p[p.length-2], {type:'bezier', lineCap:true, lineJoin:true});
         d[d.length-1].push.apply(d[d.length-1], p);
@@ -1095,7 +1095,7 @@ function Path2D(path, transform)
         }
         var y0 = d[d.length-1].pop(),
             x0 = +d[d.length-1].pop();
-        p = bezier_points([x0, y0, p[0], p[1], p[2], p[3], p[4], p[5]]);
+        p = bezier_points([x0, y0, p[0], p[1], p[2], p[3], p[4], p[5]], transform);
         p[0] = new Marker(+p[0], {type:'bezier', lineCap:true, lineJoin:'bevel'});
         p[p.length-2] = new Marker(+p[p.length-2], {type:'bezier', lineCap:true, lineJoin:true});
         d[d.length-1].push.apply(d[d.length-1], p);
@@ -1514,24 +1514,26 @@ function stroke_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, lw, xmin
 }
 function ww(w, dx, dy, sx, sy)
 {
-    var wxy, n, w2;
+    var wxy, n, w2, ox, oy;
     w2 = stdMath.max(0, (w-1)/2);
-    if (0.5 > sx*w2 && 0.5 > sy*w2)
+    ox = 1 === sx ? 0 : sx/2;
+    oy = 1 === sy ? 0 : sy/2;
+    if (0.5 > sx*w2+ox && 0.5 > sy*w2+oy)
     {
         wxy = [0, 0];
     }
     else if (is_strictly_equal(dx, 0))
     {
-        wxy = [sx*w2, 0];
+        wxy = [sx*w2+ox, 0];
     }
     else if (is_strictly_equal(dy, 0))
     {
-        wxy = [0, sy*w2];
+        wxy = [0, sy*w2+oy];
     }
     else
     {
         n = hypot(dx, dy);
-        wxy = [sx*dy*w2/n, sy*dx*w2/n];
+        wxy = [(sx*w2+ox)*dy/n, (sy*w2+oy)*dx/n];
     }
     return wxy;
 }
@@ -1643,14 +1645,15 @@ function fill_rect(set_pixel, x1, y1, x2, y2, xmin, ymin, xmax, ymax)
         }
     }
 }
-function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax)
+function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax/*, fa, fb*/)
 {
     // fill the triangle defined by a, b, c points
     var x, xx, t,
         y, yb, yc,
         xac, xab, xbc,
         yac, yab, ybc,
-        zab, zbc,
+        zab, zbc, fab = null,
+        la, lb,
         clip = null != xmin, e = 0.5;
     if (clip)
     {
@@ -1659,9 +1662,45 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
         stdMath.max(ay, by, cy) < ymin || stdMath.min(ay, by, cy) > ymax)
             return;
     }
-    if (by < ay) {t = ay; ay = by; by = t; t = ax; ax = bx; bx = t;}
-    if (cy < ay) {t = ay; ay = cy; cy = t; t = ax; ax = cx; cx = t;}
-    if (cy < by) {t = by; by = cy; cy = t; t = bx; bx = cx; cx = t;}
+    if (by < ay)
+    {
+        t = ay;
+        ay = by;
+        by = t;
+        t = ax;
+        ax = bx;
+        bx = t;
+        /*if (fa === 'a') fa = 'b';
+        if (fa === 'b') fa = 'a';
+        if (fb === 'a') fb = 'b';
+        if (fb === 'b') fb = 'a';*/
+    }
+    if (cy < ay)
+    {
+        t = ay;
+        ay = cy;
+        cy = t;
+        t = ax;
+        ax = cx;
+        cx = t;
+        /*if (fa === 'a') fa = 'c';
+        if (fa === 'c') fa = 'a';
+        if (fb === 'a') fb = 'c';
+        if (fb === 'c') fb = 'a';*/
+    }
+    if (cy < by)
+    {
+        t = by;
+        by = cy;
+        cy = t;
+        t = bx;
+        bx = cx;
+        cx = t;
+        /*if (fa === 'b') fa = 'c';
+        if (fa === 'c') fa = 'b';
+        if (fb === 'b') fb = 'c';
+        if (fb === 'c') fb = 'b';*/
+    }
     yac = cy - ay;
     if (is_strictly_equal(yac, 0))
     {
@@ -1678,6 +1717,9 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
     xbc = cx - bx;
     zab = is_strictly_equal(yab, 0);
     zbc = is_strictly_equal(ybc, 0);
+    /*if ((fa === 'a') && (fb === 'b') || (fa === 'b') && (fb === 'a')) fab = 'ab';
+    if ((fa === 'b') && (fb === 'c') || (fa === 'c') && (fb === 'b')) fab = 'bc';
+    if ((fa === 'a') && (fb === 'c') || (fa === 'c') && (fb === 'a')) fab = 'ca';*/
     y = stdMath.round(ay + e);
     yb = by;
     yc = stdMath.round(cy - e);
@@ -1690,11 +1732,26 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
             {
                 x = ax;
                 xx = bx;
+                /*if ('ab' === fab)
+                {
+                    la = stdMath.min(ax, bx);
+                    lb = stdMath.max(ax, bx);
+                }*/
             }
             else
             {
                 x = xac*(y - ay)/yac + ax;
                 xx = xab*(y - ay)/yab + ax;
+                /*if ('ab' === fab)
+                {
+                    la = xx;
+                    lb = xx;
+                }
+                else if ('ca' === fab)
+                {
+                    la = x;
+                    lb = x;
+                }*/
             }
         }
         else
@@ -1703,11 +1760,26 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
             {
                 x = bx;
                 xx = cx;
+                /*if ('bc' === fab)
+                {
+                    la = stdMath.min(cx, bx);
+                    lb = stdMath.max(cx, bx);
+                }*/
             }
             else
             {
                 x = xac*(y - ay)/yac + ax;
                 xx = xbc*(y - by)/ybc + bx;
+                /*if ('bc' === fab)
+                {
+                    la = xx;
+                    lb = xx;
+                }
+                else if ('ca' === fab)
+                {
+                    la = x;
+                    lb = x;
+                }*/
             }
         }
         if (stdMath.abs(xx - x) < 1)
@@ -1720,6 +1792,72 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
             t = x;
             x = xx;
             xx = t;
+        }
+        x = stdMath.round(x + (/*fab && (x === la || x === lb) ? 0 :*/ e));
+        xx = stdMath.round(xx - (/*fab && (xx === la || xx === lb) ? 0 :*/ e));
+        if (clip) {x = stdMath.max(xmin, x); xx = stdMath.min(xmax, xx);}
+        for (; x<=xx; ++x) set_pixel(x, y, 1);
+    }
+}
+function fill_parallelogram(set_pixel, ax, ay, bx, by, cx, cy, dx, dy, xmin, ymin, xmax, ymax)
+{
+    // fill the parallelogram defined by a, b, c, d, points in order
+    var y = stdMath.min(ay, by, cy, dy),
+        yy = stdMath.max(ay, by, cy, dy),
+        x = stdMath.min(ax, bx, cx, dx),
+        xx = stdMath.max(ax, bx, cx, dx),
+        y1, y2, x1, x2, xi, edges,
+        clip = null != xmin, t, i, j, e = 0.5;
+    if (clip)
+    {
+        // if is outside viewport return
+        if (yy < ymin || y > ymax || xx < xmin || x > xmax)
+            return;
+    }
+    if (is_strictly_equal(y, yy))
+    {
+        // line or single point
+        y = stdMath.round(y);
+        x = stdMath.round(x);
+        xx = stdMath.round(xx);
+        return fill_rect(set_pixel, x, y, xx, y, xmin, ymin, xmax, ymax);
+    }
+    y = stdMath.round(y);
+    yy = stdMath.round(yy);
+    if (clip) {y = stdMath.max(ymin, y); yy = stdMath.min(ymax, yy);}
+    if (y > yy) return;
+    edges = [
+        by < ay ? [bx, by, ax, ay] : [ax, ay, bx, by],
+        cy < by ? [cx, cy, bx, by] : [bx, by, cx, cy],
+        dy < cy ? [dx, dy, cx, cy] : [cx, cy, dx, dy],
+        ay < dy ? [ax, ay, dx, dy] : [dx, dy, ax, ay]
+    ].sort(function(a, b) {return a[1] - b[1]});
+    for (i=0; y<=yy; ++y)
+    {
+        while (i < 4 && edges[i][3] < y) ++i;
+        if (i >= 4) return;
+        x = INF;
+        xx = -INF;
+        for (j=i; j<4; ++j)
+        {
+            x1 = edges[j][0];
+            y1 = edges[j][1];
+            x2 = edges[j][2];
+            y2 = edges[j][3];
+            if (y1 <= y && y <= y2)
+            {
+                if (is_strictly_equal(y1, y2))
+                {
+                    x = stdMath.min(x, x1, x2);
+                    xx = stdMath.max(xx, x1, x2);
+                }
+                else
+                {
+                    xi = (x2 - x1)*(y - y1)/(y2 - y1) + x1;
+                    x = stdMath.min(x, xi);
+                    xx = stdMath.max(xx, xi);
+                }
+            }
         }
         x = stdMath.round(x + e);
         xx = stdMath.round(xx - e);
@@ -2067,8 +2205,9 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
     }
     wu_line(set_pixel, xc, yc, xa, ya, null, null, 1, xmin, ymin, xmax, ymax);
     // fill
-    fill_triangle(set_pixel, xa, ya, xb, yb, xc, yc, xmin, ymin, xmax, ymax);
-    fill_triangle(set_pixel, xb, yb, xc, yc, xd, yd, xmin, ymin, xmax, ymax);
+    /*fill_triangle(set_pixel, xa, ya, xb, yb, xc, yc, xmin, ymin, xmax, ymax);
+    fill_triangle(set_pixel, xb, yb, xc, yc, xd, yd, xmin, ymin, xmax, ymax);*/
+    fill_parallelogram(set_pixel, xa, ya, xb, yb, xd, yd, xc, yc, xmin, ymin, xmax, ymax);
 }
 function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, dy2, wx2, wy2, j, ml, xmin, ymin, xmax, ymax)
 {
@@ -2218,7 +2357,7 @@ function arc_points(cx, cy, rx, ry, a, ts, te, ccw, transform)
                 yo = cy + sin*x + cos*y;
             return hasTransform ? transform.transform(xo, yo) : [xo, yo];
         },
-        points = sample_curve(arc);
+        points = sample_curve(arc, hasTransform ? transform.sx : 1, hasTransform ? transform.sy : 1);
 
     // normally must call .closePath even if the whole TWO_PI arc is drawn
     //if (stdMath.abs(delta)+1e-3 >= TWO_PI && (!is_almost_equal(points[0], points[points.length-2], 1e-3) || !is_almost_equal(points[1], points[points.length-1], 1e-3))) points.push(points[0], points[1]);
@@ -2320,7 +2459,7 @@ function arc2arc(x0, y0, x1, y1, x2, y2, r)
     ,ccw && !is_almost_equal(TWO_PI, r) ? true : false
     ];
 }
-function bezier_points(c)
+function bezier_points(c, transform)
 {
     var quadratic = function(t) {
            var t0 = t, t1 = 1 - t, t11 = t1*t1, t10 = 2*t1*t0, t00 = t0*t0;
@@ -2338,8 +2477,9 @@ function bezier_points(c)
                t111*c[0] + t110*c[2] + t100*c[4] + t000*c[6],
                t111*c[1] + t110*c[3] + t100*c[5] + t000*c[7]
            ];
-        };
-    return sample_curve(6 < c.length ? cubic : quadratic);
+        },
+        hasTransform = transform && !transform.isIdentity;
+    return sample_curve(6 < c.length ? cubic : quadratic, hasTransform ? transform.sx : 1, hasTransform ? transform.sy : 1);
 }
 function stroke_path(set_pixel, path, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, sx, sy, xmin, ymin, xmax, ymax)
 {
@@ -2683,22 +2823,23 @@ function redundant(edg, n, y)
     }
     return c;
 }
-function sample_curve(f)
+function sample_curve(f, sx, sy)
 {
     var i, p, points = [], n = NUM_POINTS;
     p = f(0);
     points.push(p[0], p[1]);
     for (i=0; i<n; ++i)
     {
-        p = subdivide_curve(points, f, 0 === i ? 0 : i/n, n === i+1 ? 1 : (i+1)/n, p, null);
+        p = subdivide_curve(points, f, sx, sy, 0 === i ? 0 : i/n, n === i+1 ? 1 : (i+1)/n, p, null);
     }
     return points;
 }
-function subdivide_curve(points, f, l, r, left, right)
+function subdivide_curve(points, f, sx, sy, l, r, left, right)
 {
     if ((l >= r) || is_almost_equal(l, r, 1e-6)) return left;
     left = left || f(l); right = right || f(r);
-    var m, middle, d = hypot(right[0] - left[0], right[1] - left[1]);
+    var m, middle, sc = stdMath.max(sx, sy),
+        d = hypot((right[0] - left[0]), (right[1] - left[1]))*sc;
     if (d <= MIN_LEN)
     {
         // segment should have at least 2 pixels length
@@ -2710,7 +2851,7 @@ function subdivide_curve(points, f, l, r, left, right)
     {
         m = (l + r) / 2;
         middle = f(m);
-        if (point_line_distance(middle[0], middle[1], left[0], left[1], right[0], right[1]) <= PIXEL_SIZE)
+        if (point_line_distance(middle[0], middle[1], left[0], left[1], right[0], right[1])*sc < PIXEL_SIZE)
         {
             // no more refinement
             // return linear interpolation between left and right
@@ -2719,8 +2860,8 @@ function subdivide_curve(points, f, l, r, left, right)
         else
         {
             // recursively subdivide to refine samples with high enough curvature
-            subdivide_curve(points, f, l, m, left, middle);
-            subdivide_curve(points, f, m, r, middle, right);
+            subdivide_curve(points, f, sx, sy, l, m, left, middle);
+            subdivide_curve(points, f, sx, sy, m, r, middle, right);
         }
     }
     return right;
