@@ -1645,15 +1645,14 @@ function fill_rect(set_pixel, x1, y1, x2, y2, xmin, ymin, xmax, ymax)
         }
     }
 }
-function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax/*, fa, fb*/)
+function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax)
 {
     // fill the triangle defined by a, b, c points
     var x, xx, t,
         y, yb, yc,
         xac, xab, xbc,
         yac, yab, ybc,
-        zab, zbc, fab = null,
-        la, lb,
+        zab, zbc,
         clip = null != xmin, e = 0.5;
     if (clip)
     {
@@ -1670,10 +1669,6 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
         t = ax;
         ax = bx;
         bx = t;
-        /*if (fa === 'a') fa = 'b';
-        if (fa === 'b') fa = 'a';
-        if (fb === 'a') fb = 'b';
-        if (fb === 'b') fb = 'a';*/
     }
     if (cy < ay)
     {
@@ -1683,10 +1678,6 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
         t = ax;
         ax = cx;
         cx = t;
-        /*if (fa === 'a') fa = 'c';
-        if (fa === 'c') fa = 'a';
-        if (fb === 'a') fb = 'c';
-        if (fb === 'c') fb = 'a';*/
     }
     if (cy < by)
     {
@@ -1696,10 +1687,6 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
         t = bx;
         bx = cx;
         cx = t;
-        /*if (fa === 'b') fa = 'c';
-        if (fa === 'c') fa = 'b';
-        if (fb === 'b') fb = 'c';
-        if (fb === 'c') fb = 'b';*/
     }
     yac = cy - ay;
     if (is_strictly_equal(yac, 0))
@@ -1717,9 +1704,6 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
     xbc = cx - bx;
     zab = is_strictly_equal(yab, 0);
     zbc = is_strictly_equal(ybc, 0);
-    /*if ((fa === 'a') && (fb === 'b') || (fa === 'b') && (fb === 'a')) fab = 'ab';
-    if ((fa === 'b') && (fb === 'c') || (fa === 'c') && (fb === 'b')) fab = 'bc';
-    if ((fa === 'a') && (fb === 'c') || (fa === 'c') && (fb === 'a')) fab = 'ca';*/
     y = stdMath.round(ay + e);
     yb = by;
     yc = stdMath.round(cy - e);
@@ -1732,26 +1716,11 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
             {
                 x = ax;
                 xx = bx;
-                /*if ('ab' === fab)
-                {
-                    la = stdMath.min(ax, bx);
-                    lb = stdMath.max(ax, bx);
-                }*/
             }
             else
             {
                 x = xac*(y - ay)/yac + ax;
                 xx = xab*(y - ay)/yab + ax;
-                /*if ('ab' === fab)
-                {
-                    la = xx;
-                    lb = xx;
-                }
-                else if ('ca' === fab)
-                {
-                    la = x;
-                    lb = x;
-                }*/
             }
         }
         else
@@ -1760,26 +1729,11 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
             {
                 x = bx;
                 xx = cx;
-                /*if ('bc' === fab)
-                {
-                    la = stdMath.min(cx, bx);
-                    lb = stdMath.max(cx, bx);
-                }*/
             }
             else
             {
                 x = xac*(y - ay)/yac + ax;
                 xx = xbc*(y - by)/ybc + bx;
-                /*if ('bc' === fab)
-                {
-                    la = xx;
-                    lb = xx;
-                }
-                else if ('ca' === fab)
-                {
-                    la = x;
-                    lb = x;
-                }*/
             }
         }
         if (stdMath.abs(xx - x) < 1)
@@ -1793,15 +1747,15 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
             x = xx;
             xx = t;
         }
-        x = stdMath.round(x + (/*fab && (x === la || x === lb) ? 0 :*/ e));
-        xx = stdMath.round(xx - (/*fab && (xx === la || xx === lb) ? 0 :*/ e));
+        x = stdMath.round(x +  e);
+        xx = stdMath.round(xx - e);
         if (clip) {x = stdMath.max(xmin, x); xx = stdMath.min(xmax, xx);}
         for (; x<=xx; ++x) set_pixel(x, y, 1);
     }
 }
-function fill_parallelogram(set_pixel, ax, ay, bx, by, cx, cy, dx, dy, xmin, ymin, xmax, ymax)
+function fill_trapezoid(set_pixel, ax, ay, bx, by, cx, cy, dx, dy, xmin, ymin, xmax, ymax)
 {
-    // fill the parallelogram defined by a, b, c, d, points in order
+    // fill the trapezoid defined by a, b, c, d, points in order
     var y = stdMath.min(ay, by, cy, dy),
         yy = stdMath.max(ay, by, cy, dy),
         x = stdMath.min(ax, bx, cx, dx),
@@ -1827,11 +1781,21 @@ function fill_parallelogram(set_pixel, ax, ay, bx, by, cx, cy, dx, dy, xmin, ymi
     if (clip) {y = stdMath.max(ymin, y); yy = stdMath.min(ymax, yy);}
     if (y > yy) return;
     edges = [
-        by < ay ? [bx, by, ax, ay] : [ax, ay, bx, by],
-        cy < by ? [cx, cy, bx, by] : [bx, by, cx, cy],
-        dy < cy ? [dx, dy, cx, cy] : [cx, cy, dx, dy],
-        ay < dy ? [ax, ay, dx, dy] : [dx, dy, ax, ay]
-    ].sort(function(a, b) {return a[1] - b[1]});
+    by < ay ? [bx, by, ax, ay] : [ax, ay, bx, by],
+    cy < by ? [cx, cy, bx, by] : [bx, by, cx, cy],
+    dy < cy ? [dx, dy, cx, cy] : [cx, cy, dx, dy],
+    ay < dy ? [ax, ay, dx, dy] : [dx, dy, ax, ay]
+    ];
+    /*if (a > b) swap(a,b)
+    if (c > d) swap(c,d)
+    if (a > c) swap(a,c)
+    if (b > d) swap(b,d)
+    if (b > c) swap(b,c)*/
+    if (edges[1][1] < edges[0][1]) {t=edges[0]; edges[0]=edges[1]; edges[1]=t;}
+    if (edges[3][1] < edges[2][1]) {t=edges[2]; edges[2]=edges[3]; edges[3]=t;}
+    if (edges[2][1] < edges[0][1]) {t=edges[0]; edges[0]=edges[2]; edges[2]=t;}
+    if (edges[3][1] < edges[1][1]) {t=edges[1]; edges[1]=edges[3]; edges[3]=t;}
+    if (edges[2][1] < edges[1][1]) {t=edges[2]; edges[2]=edges[1]; edges[1]=t;}
     for (i=0; y<=yy; ++y)
     {
         while (i < 4 && edges[i][3] < y) ++i;
@@ -1858,6 +1822,11 @@ function fill_parallelogram(set_pixel, ax, ay, bx, by, cx, cy, dx, dy, xmin, ymi
                     xx = stdMath.max(xx, xi);
                 }
             }
+        }
+        if (xx - x < 1)
+        {
+            if (!clip || (x >= xmin && x <= xmax)) set_pixel(stdMath.round(x), y, 1);
+            continue;
         }
         x = stdMath.round(x + e);
         xx = stdMath.round(xx - e);
@@ -2207,7 +2176,7 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
     // fill
     /*fill_triangle(set_pixel, xa, ya, xb, yb, xc, yc, xmin, ymin, xmax, ymax);
     fill_triangle(set_pixel, xb, yb, xc, yc, xd, yd, xmin, ymin, xmax, ymax);*/
-    fill_parallelogram(set_pixel, xa, ya, xb, yb, xd, yd, xc, yc, xmin, ymin, xmax, ymax);
+    fill_trapezoid(set_pixel, xa, ya, xb, yb, xd, yd, xc, yc, xmin, ymin, xmax, ymax);
 }
 function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, dy2, wx2, wy2, j, ml, xmin, ymin, xmax, ymax)
 {
