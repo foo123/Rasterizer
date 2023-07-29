@@ -852,16 +852,22 @@ function Path2D(path, transform)
         {
             var x0 = +d[d.length-1][0],
                 y0 = d[d.length-1][1],
+                x2 = +d[d.length-1][2],
+                y2 = d[d.length-1][3],
                 x1 = +d[d.length-1][d[d.length-1].length-2],
                 y1 = d[d.length-1][d[d.length-1].length-1]
             ;
             if (!(is_almost_equal(x0, x1, 1e-6) && is_almost_equal(y0, y1, 1e-6)))
             {
-                d[d.length-1].push(x0, y0);
-                d.push([x0, y0]);
-                need_new_subpath = false;
-                sd = null;
+                d[d.length-1].push(new Marker(x0, {join:[x2, y2]}), y0);
             }
+            else
+            {
+                d[d.length-1][d[d.length-1].length-2] = new Marker(x1, {join:[x2, y2]});
+            }
+            d.push([x0, y0]);
+            need_new_subpath = false;
+            sd = null;
         }
         return self;
     };
@@ -888,7 +894,7 @@ function Path2D(path, transform)
             x, y + h
         ], transform);
         if (!p) return self;
-        p.push(p[0], p[1]);
+        p[0] = new Marker(+p[0], {lineCap:'butt', lineJoin:'miter'});
         if (d.length && 2 >= d[d.length-1].length)
         {
             d[d.length-1] = p;
@@ -897,11 +903,8 @@ function Path2D(path, transform)
         {
             d.push(p);
         }
-        d.push([p[0], p[1]]);
-        p[0] = new Marker(+p[0], {lineCap:'butt', lineJoin:'miter'});
         sd = null;
-        need_new_subpath = false;
-        return self;
+        return self.closePath();
     };
     self.roundRect = function(x, y, w, h/*,..*/) {
         var p = handle([
@@ -985,10 +988,8 @@ function Path2D(path, transform)
         add_arcto(p, x, y + upperLeft, x, y, x + upperLeft, y, upperLeft, transform);
         p[0] = new Marker(+p[0], {lineCap:'butt', lineJoin:'bevel'});
         d.push(p);
-        d.push(transform.transform(x, y));
         sd = null;
-        need_new_subpath = false;
-        return self;
+        return self.closePath();
     };
     self.arc = function(cx, cy, r, start, end, ccw) {
         var p = handle([
@@ -1112,10 +1113,14 @@ function Path2D(path, transform)
 
     add_path = function(path/*, transform*/) {
         var last;
-        d.push.apply(d, path._d.map(function(p) {
-            if (p.length) last = [+p[p.length-2], p[p.length-1]];
-            return p.slice();
-        }));
+        path._d.reduce(function(d, p) {
+            if (p && p.length && (2 < p.length))
+            {
+                last = [+p[p.length-2], p[p.length-1]];
+                d.push(p.slice());
+            }
+            return d;
+        }, d);
         if (last)
         {
             d.push(last);
@@ -1477,6 +1482,18 @@ function stroke_polyline(set_pixel, points, lw, ld, ldo, lc, lj, ml, sx, sy, xmi
             dy1 = dy2;
             w1 = w2;
         }
+        if (x2.params && x2.params.join)
+        {
+            xp = x2.params.join[0];
+            yp = x2.params.join[1];
+            dx1 = stdMath.abs(xp - x2);
+            dy1 = stdMath.abs(yp - y2);
+            w1 = ww(lw, dx1, dy1, sx, sy);
+            if (0 < w1[0] || 0 < w1[1] || 0 < w2[0] || 0 < w2[1])
+            {
+                join_lines(set_pixel, x1, y1, x2, y2, xp, yp, dx2, dy2, w2[0], w2[1], dx1, dy1, w1[0], w1[1], ljj, ml, xmin, ymin, xmax, ymax);
+            }
+        }
     }
 }
 function stroke_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, lw, xmin, ymin, xmax, ymax)
@@ -1493,8 +1510,12 @@ function stroke_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, lw, xmin
 function ww(w, dx, dy, sx, sy)
 {
     var wxy, n, w2;
-    w2 = stdMath.abs((w/*-1*/)/2);
-    if (is_strictly_equal(dx, 0))
+    w2 = stdMath.abs((w-1)/2);
+    if (0.5 > sx*w2 && 0.5 > sy*w2)
+    {
+        wxy = [0, 0];
+    }
+    else if (is_strictly_equal(dx, 0))
     {
         wxy = [sx*w2, 0];
     }
@@ -1507,7 +1528,6 @@ function ww(w, dx, dy, sx, sy)
         n = hypot(dx, dy);
         wxy = [sx*dy*w2/n, sy*dx*w2/n];
     }
-    if (0.5 >= wxy[0] && 0.5 >= wxy[1]) wxy = [0, 0];
     return wxy;
 }
 function clip(x1, y1, x2, y2, xmin, ymin, xmax, ymax)
@@ -2599,7 +2619,7 @@ function path_to_segments(polylines)
         {
             if (p[i].params && p[i].params.type)
             {
-                if ((0 <= h) && segments.length)
+                if ((0 <= h) && h < segments.length)
                 {
                     // relate start and end of curve segments
                     segments[h][7] = segments[h+l-2][6] + 1;
@@ -2642,10 +2662,10 @@ function redundant(edg, n, y)
             if (f[9] || (e[4] !== f[4]) || (e[5] !== f[5])
                 || ((1 < stdMath.abs(e[6] - f[6])) && (1 < stdMath.abs(e[7] - f[7])))) continue;
             if (
-                (is_almost_equal(e[0], f[0], 1e-5)
-                && is_almost_equal(e[1], f[1], 1e-5)
-                && is_almost_equal(e[2], f[2], 1e-5)
-                && is_almost_equal(e[3], f[3], 1e-5))
+                (is_almost_equal(e[0], f[0], 1e-6)
+                && is_almost_equal(e[1], f[1], 1e-6)
+                && is_almost_equal(e[2], f[2], 1e-6)
+                && is_almost_equal(e[3], f[3], 1e-6))
                 || is_almost_equal(e[3], f[1], 1e-6)
                 || is_almost_equal(e[1], f[3], 1e-6)
             )
@@ -2704,7 +2724,7 @@ function parse_path(d, path)
     var c = trim(String(d)).match(COMMAND),
         p = d.split(COMMAND),
         curr = [0, 0], start = [curr[0], curr[1]],
-        prev = null, hasPath = false;
+        prev = null, hasPath = false, hasMoveTo = false;
     c && c.forEach(function(c, i) {
         var isRelative = c === c.toLowerCase(),
             pp = (trim(p[i+1] || '').match(NUMBER) || []).map(parse_number),
@@ -2712,7 +2732,6 @@ function parse_path(d, path)
         switch (c.toUpperCase())
         {
             case 'M':
-            hasPath = true;
             implicitLine = false;
             while (2 <= pp.length)
             {
@@ -2726,6 +2745,7 @@ function parse_path(d, path)
                     curr[0] = p2[0];
                     curr[1] = p2[1];
                     path.lineTo(curr[0], curr[1]);
+                    hasPath = true;
                 }
                 else
                 {
@@ -2733,13 +2753,14 @@ function parse_path(d, path)
                     curr[1] = (isRelative ? curr[1] : 0) + pp.shift();
                     start = [curr[0], curr[1]];
                     path.moveTo(curr[0], curr[1]);
+                    hasMoveTo = true;
                 }
                 implicitLine = true;
             }
             prev = null;
             break;
             case 'H':
-            hasPath = true;
+            hasPath = hasMoveTo || hasPath;
             while (1 <= pp.length)
             {
                 p1 = [curr[0], curr[1]];
@@ -2750,11 +2771,13 @@ function parse_path(d, path)
                 curr[0] = p2[0];
                 curr[1] = p2[1];
                 path.lineTo(curr[0], curr[1]);
+                if (hasMoveTo) hasPath = true;
+                hasMoveTo = true;
             }
             prev = null;
             break;
             case 'V':
-            hasPath = true;
+            hasPath = hasMoveTo || hasPath;
             while (1 <= pp.length)
             {
                 p1 = [curr[0], curr[1]];
@@ -2765,11 +2788,13 @@ function parse_path(d, path)
                 curr[0] = p2[0];
                 curr[1] = p2[1];
                 path.lineTo(curr[0], curr[1]);
+                if (hasMoveTo) hasPath = true;
+                hasMoveTo = true;
             }
             prev = null;
             break;
             case 'L':
-            hasPath = true;
+            hasPath = hasMoveTo || hasPath;
             while (2 <= pp.length)
             {
                 p1 = [curr[0], curr[1]];
@@ -2780,11 +2805,14 @@ function parse_path(d, path)
                 curr[0] = p2[0];
                 curr[1] = p2[1];
                 path.lineTo(curr[0], curr[1]);
+                if (hasMoveTo) hasPath = true;
+                hasMoveTo = true;
             }
             prev = null;
             break;
             case 'A':
             hasPath = true;
+            hasMoveTo = true;
             while (7 <= pp.length)
             {
                 tmp = {
@@ -2811,6 +2839,7 @@ function parse_path(d, path)
             break;
             case 'Q':
             hasPath = true;
+            hasMoveTo = true;
             while (4 <= pp.length)
             {
                 p1 = [curr[0], curr[1]];
@@ -2830,6 +2859,7 @@ function parse_path(d, path)
             break;
             case 'T':
             hasPath = true;
+            hasMoveTo = true;
             while (2 <= pp.length)
             {
                 p1 = [curr[0], curr[1]];
@@ -2849,6 +2879,7 @@ function parse_path(d, path)
             break;
             case 'C':
             hasPath = true;
+            hasMoveTo = true;
             while (6 <= pp.length)
             {
                 p1 = [curr[0], curr[1]];
@@ -2872,6 +2903,7 @@ function parse_path(d, path)
             break;
             case 'S':
             hasPath = true;
+            hasMoveTo = true;
             while (4 <= pp.length)
             {
                 p1 = [curr[0], curr[1]];
@@ -2899,7 +2931,9 @@ function parse_path(d, path)
             curr[0] = p2[0];
             curr[1] = p2[1];
             start = [curr[0], curr[1]];
-            path.lineTo(curr[0], curr[1]);
+            path.closePath();
+            hasPath = false;
+            hasMoveTo = false;
             prev = null;
             break;
         }

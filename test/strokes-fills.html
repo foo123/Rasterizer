@@ -453,6 +453,44 @@ function drawBeziers(c, angle)
     ctx.stroke();
     ctx2.putImageData(imData, 0, 0);
 }
+function drawRect()
+{
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+    test1.appendChild(text('rect'));
+    test2.appendChild(text('rect'));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+
+    const ctx1 = canvas1.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
+
+    // Rotated Rounded rectangle with 2 different radii
+    ctx1.strokeStyle = "#f00";
+    ctx1.lineWidth = 20;
+    ctx1.beginPath();
+    ctx1.rect(40, 40, 90, 100);
+    ctx1.stroke();
+
+    const imData = ctx2.getImageData(0, 0, w, h);
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
+    const ctx = r.getContext("2d");
+    ctx.strokeStyle = [0xff,0,0];
+    ctx.lineWidth = 20;
+    ctx.beginPath();
+    ctx.rect(40, 40, 90, 100);
+    ctx.stroke();
+
+    ctx2.putImageData(imData, 0, 0);
+}
 function drawRoundRect()
 {
     const canvas1 = document.createElement('canvas');
@@ -820,11 +858,12 @@ drawGradientCircles();
 drawArcTo();
 //drawArcs(10, 2, -Math.PI/4);
 drawBeziers([10, 10, 200, 100, 10, 100, 70, 10], -Math.PI/4);
+drawRect();
 drawRoundRect();
 clearRect();
-drawGradientArc(50, 50, 20, 40, 30*Math.PI/180, 1, 3*Math.PI/2, false, 1, [], 'butt', 'bevel');
-drawGradientArc(50, 50, 20, 40, 30*Math.PI/180, 1, Math.PI/2, true, 1, [], 'butt', 'bevel');
-drawGradientBezier([10, 10, 200, 100, 10, 100, 70, 10], 2, [], 'butt', 'bevel');
+drawGradientArc(50, 50, 20, 40, 30*Math.PI/180, 1, 3*Math.PI/2, false, 2, [], 'butt', 'bevel');
+drawGradientArc(50, 50, 20, 40, 30*Math.PI/180, 1, Math.PI/2, true, 2, [], 'butt', 'bevel');
+drawGradientBezier([10, 10, 200, 100, 10, 100, 70, 10], 4, [], 'butt', 'bevel');
 fillGradientBezier([10, 10, 200, 100, 10, 100, 70, 10], 'nonzero');
 fillGradientBezier([10, 10, 200, 100, 10, 100, 70, 10], 'evenodd');
 fillGradientDisk(50, 50, 10, 40, 'nonzero', true);
