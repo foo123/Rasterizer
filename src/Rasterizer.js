@@ -478,6 +478,11 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
             var t = path.transform,
                 sx = stdMath.abs(t.sx),
                 sy = stdMath.abs(t.sy);
+            /*if (!t.isIdentity)
+            {
+                sx = hypot(t.m11, t.m21);
+                sy = hypot(-t.m12, t.m22);
+            }*/
             canvas_reset();
             stroke_path(set_pixel, path, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, sx, sy, 0, 0, width - 1, height - 1);
             canvas_output(stroke_pixel);
@@ -1510,7 +1515,7 @@ function stroke_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, lw, xmin
 function ww(w, dx, dy, sx, sy)
 {
     var wxy, n, w2;
-    w2 = stdMath.abs((w-1)/2);
+    w2 = stdMath.max(0, (w-1)/2);
     if (0.5 > sx*w2 && 0.5 > sy*w2)
     {
         wxy = [0, 0];
@@ -2040,7 +2045,8 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
     xd = xe + wsx;
     yd = ye - wsy;
 
-    lw = hypot(wx, wy);
+    if ('round' === cs || 'round' === ce) lw = hypot(wx, wy);
+
     // outline
     if ('round' === cs)
     {
