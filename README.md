@@ -14,7 +14,7 @@ Rasterize, stroke and fill lines, rectangles, curves and paths. Even without can
 
 **see also:**
 
-* [CanvasLite](https://github.com/foo123/CanvasLite) an html canvas implementation in pure JavScript
+* [CanvasLite](https://github.com/foo123/CanvasLite) an html canvas implementation in pure JavaScript
 * [Rasterizer](https://github.com/foo123/Rasterizer) stroke and fill lines, rectangles, curves and paths, without canvaσ
 * [Gradient](https://github.com/foo123/Gradient) create linear, radial, conic and elliptic gradients and image patterns without canvas
 * [Geometrize](https://github.com/foo123/Geometrize) Computational Geometry and Rendering Library for JavaScript
