@@ -84,7 +84,8 @@ function drawLine(x1, y1, x2, y2, lw, ld, lc)
     ctx1.strokeStyle = '#000';
     ctx1.lineCap = lc;
     ctx1.lineWidth = lw;
-    ctx1.setLineDash(ld);
+    ctx1.lineDashOffset = ld.length ? ld[0] : 0;
+    ctx1.setLineDash(ld.length ? ld[1] : []);
     ctx1.moveTo(x1, y1);
     ctx1.lineTo(x2, y2);
     ctx1.stroke();
@@ -96,7 +97,8 @@ function drawLine(x1, y1, x2, y2, lw, ld, lc)
     ctx.strokeStyle = [0,0,0,1];
     ctx.lineCap = lc;
     ctx.lineWidth = lw;
-    ctx.setLineDash(ld);
+    ctx.lineDashOffset = ld.length ? ld[0] : 0;
+    ctx.setLineDash(ld.length ? ld[1] : []);
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
     ctx.stroke();
@@ -133,7 +135,8 @@ function drawPolyline(x1, y1, x2, y2, x3, y3, lw, ld, lc, lj, ml)
     ctx1.lineJoin = lj;
     ctx1.miterLimit = ml;
     ctx1.lineWidth = lw;
-    ctx1.setLineDash(ld);
+    ctx1.lineDashOffset = ld.length ? ld[0] : 0;
+    ctx1.setLineDash(ld.length ? ld[1] : []);
     ctx1.moveTo(x1, y1); // move creates new polyline
     ctx1.lineTo(x2, y2);
     ctx1.lineTo(x3, y3);
@@ -148,7 +151,8 @@ function drawPolyline(x1, y1, x2, y2, x3, y3, lw, ld, lc, lj, ml)
     ctx.lineJoin = lj;
     ctx.miterLimit = ml;
     ctx.lineWidth = lw;
-    ctx.setLineDash(ld);
+    ctx.lineDashOffset = ld.length ? ld[0] : 0;
+    ctx.setLineDash(ld.length ? ld[1] : []);
     ctx.moveTo(x1, y1); // move creates new polyline
     ctx.lineTo(x2, y2);
     ctx.lineTo(x3, y3);
@@ -194,7 +198,8 @@ function drawGradientLine(x1, y1, x2, y2, lw, ld, lc)
     ctx1.strokeStyle = grad1;
     ctx1.lineCap = lc;
     ctx1.lineWidth = lw;
-    ctx1.setLineDash(ld);
+    ctx1.lineDashOffset = ld.length ? ld[0] : 0;
+    ctx1.setLineDash(ld.length ? ld[1] : []);
     ctx1.moveTo(x1, y1);
     ctx1.lineTo(x2, y2);
     ctx1.stroke();
@@ -206,7 +211,8 @@ function drawGradientLine(x1, y1, x2, y2, lw, ld, lc)
     ctx.strokeStyle = grad2.getColorAt.bind(grad2);
     ctx.lineCap = lc;
     ctx.lineWidth = lw;
-    ctx.setLineDash(ld);
+    ctx.lineDashOffset = ld.length ? ld[0] : 0;
+    ctx.setLineDash(ld.length ? ld[1] : []);
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
     ctx.stroke();
@@ -242,7 +248,8 @@ function drawGradientArc(cx, cy, rx, ry, a, t0, t1, fs, lw, ld, lc, lj)
     ctx1.lineCap = lc;
     ctx1.lineJoin = lj;
     ctx1.lineWidth = lw;
-    ctx1.setLineDash(ld);
+    ctx1.lineDashOffset = ld.length ? ld[0] : 0;
+    ctx1.setLineDash(ld.length ? ld[1] : []);
     ctx1.ellipse(cx, cy, rx, ry, a, t0, t1, fs);
     ctx1.stroke();
 
@@ -254,7 +261,8 @@ function drawGradientArc(cx, cy, rx, ry, a, t0, t1, fs, lw, ld, lc, lj)
     ctx.lineCap = lc;
     ctx.lineJoin = lj;
     ctx.lineWidth = lw;
-    ctx.setLineDash(ld);
+    ctx.lineDashOffset = ld.length ? ld[0] : 0;
+    ctx.setLineDash(ld.length ? ld[1] : []);
     ctx.ellipse(cx, cy, rx, ry, a, t0, t1, fs);
     ctx.stroke();
     ctx2.putImageData(imData, 0, 0);
@@ -379,14 +387,15 @@ function drawArcs(sx, sy, angle)
     const ctx1 = canvas1.getContext("2d");
     const ctx2 = canvas2.getContext("2d");
 
+    //sx = 5; sy = 1;
     ctx1.beginPath();
     ctx1.strokeStyle = "#555";
-    ctx1.lineWidth = 4;
-    ctx1.translate(100, 100);
+    ctx1.lineWidth = 4
+    //ctx1.translate(10, 10);
     ctx1.scale(sx, sy);
     //ctx1.rotate(angle);
-    ctx1.translate(-100, -100);
-    ctx1.arc(100, 100, 5, 0, 3*Math.PI/2, false);
+    //ctx1.translate(-10, -10);
+    ctx1.arc(10, 10, 5, 0, 3*Math.PI/2, false);
     ctx1.stroke();
 
     const imData = ctx2.getImageData(0, 0, w, h);
@@ -395,11 +404,11 @@ function drawArcs(sx, sy, angle)
     ctx.beginPath();
     ctx.strokeStyle = [0x55, 0x55, 0x55];
     ctx.lineWidth = 4;
-    ctx.translate(100, 100);
+    //ctx.translate(10, 10);
     ctx.scale(sx, sy);
     //ctx.rotate(angle);
-    ctx.translate(-100, -100);
-    ctx.arc(100, 100, 5, 0, 3*Math.PI/2, false, 1);
+    //ctx.translate(-10, -10);
+    ctx.arc(10, 10, 5, 0, 3*Math.PI/2, false, 1);
     ctx.stroke();
     ctx2.putImageData(imData, 0, 0);
     /*
@@ -598,7 +607,8 @@ function drawGradientBezier(c, lw, ld, lc, lj)
     ctx1.lineCap = lc;
     ctx1.lineJoin = lj;
     ctx1.lineWidth = lw;
-    ctx1.setLineDash(ld);
+    ctx1.lineDashOffset = ld.length ? ld[0] : 0;
+    ctx1.setLineDash(ld.length ? ld[1] : []);
     ctx1.moveTo(c[0], c[1]);
     ctx1.bezierCurveTo(c[2], c[3], c[4], c[5], c[6], c[7]);
     ctx1.stroke();
@@ -611,9 +621,63 @@ function drawGradientBezier(c, lw, ld, lc, lj)
     ctx.lineCap = lc;
     ctx.lineJoin = lj;
     ctx.lineWidth = lw;
-    ctx.setLineDash(ld);
+    ctx.lineDashOffset = ld.length ? ld[0] : 0;
+    ctx.setLineDash(ld.length ? ld[1] : []);
     ctx.moveTo(c[0], c[1]);
     ctx.bezierCurveTo(c[2], c[3], c[4], c[5], c[6], c[7]);
+    ctx.stroke();
+    ctx2.putImageData(imData, 0, 0);
+}
+function drawGradientPeace()
+{
+    const w = 300, h = 300;
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+    test1.appendChild(text('Colorful Peace sign'));
+    test2.appendChild(text('Colorful Peace sign'));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+
+    const ctx1 = canvas1.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
+    const grad1 = addColorStops(ctx1.createLinearGradient(20, 20, 180, 180));
+    const grad2 = addColorStops(Gradient.createLinearGradient(20, 20, 180, 180));
+
+    ctx1.strokeStyle = grad1;
+    ctx1.lineWidth = 21;
+    ctx1.beginPath();
+    ctx1.arc(125, 125, 106, 0, 2*Math.PI);
+    ctx1.closePath();
+    ctx1.moveTo(125, 19);
+    ctx1.lineTo(125, 19+212);
+    ctx1.moveTo(125, 125);
+    ctx1.lineTo(125-75, 125+75);
+    ctx1.moveTo(125, 125);
+    ctx1.lineTo(125+75, 125+75);
+    ctx1.stroke();
+
+    const imData = ctx2.getImageData(0, 0, w, h);
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
+    const ctx = r.getContext("2d");
+    ctx.strokeStyle = grad2.getColorAt.bind(grad2);
+    ctx.lineWidth = 21;
+    ctx.beginPath();
+    ctx.arc(125, 125, 106, 0, 2*Math.PI);
+    ctx.closePath();
+    ctx.moveTo(125, 19);
+    ctx.lineTo(125, 19+212);
+    ctx.moveTo(125, 125);
+    ctx.lineTo(125-75, 125+75);
+    ctx.moveTo(125, 125);
+    ctx.lineTo(125+75, 125+75);
     ctx.stroke();
     ctx2.putImageData(imData, 0, 0);
 }
@@ -819,6 +883,8 @@ for (var i=0, m=points.length-4; i<m; i+=2)
     drawPolyline(points[i], points[i+1], points[i+2], points[i+3], points[i+4], points[i+5], 20, [], 'butt', 'bevel');
 }
 }
+//drawGradientPeace();
+//return;
 //test();
 drawLine(20, 20, 80, 100, 1);
 drawLine(20, 20, 80, 100, 0.5);
@@ -854,9 +920,19 @@ drawPolyline(20, 10, 40, 60, 70, 70, 20, [], 'butt', 'round');
 drawPolyline(20, 10, 40, 60, 10, 70, 20, [], 'butt', 'round');
 drawPolyline(20, 70, 40, 10, 70, 60, 20, [], 'butt', 'round');
 drawPolyline(20, 10, 40, 70, 70, 20, 20, [], 'butt', 'round');
+drawPolyline(60, 20, 20, 20, 20, 60, 20, [0,[1,1]], 'butt', 'bevel');
+drawPolyline(10, 10, 60, 10, 60, 60, 20, [0,[10,5]], 'butt', 'bevel');
+drawPolyline(20, 10, 20, 60, 60, 60, 20, [0,[10,5]], 'butt', 'bevel');
+drawPolyline(60, 10, 60, 60, 10, 60, 20, [0,[10,5]], 'butt', 'bevel');
+drawPolyline(70, 70, 40, 60, 20, 10, 20, [0,[10,5]], 'butt', 'bevel');
+drawPolyline(20, 10, 40, 60, 70, 70, 20, [0,[10,5]], 'butt', 'bevel');
+drawPolyline(20, 10, 40, 60, 10, 70, 20, [0,[10,5]], 'butt', 'bevel');
+drawPolyline(20, 70, 40, 10, 70, 60, 20, [0,[10,5]], 'butt', 'bevel');
+drawPolyline(20, 10, 40, 70, 70, 20, 20, [0,[10,5]], 'butt', 'bevel');
+drawPolyline(70, 20, 40, 70, 20, 10, 20, [0,[10,5]], 'butt', 'bevel');
 drawGradientCircles();
 drawArcTo();
-//drawArcs(10, 2, -Math.PI/4);
+drawArcs(6, 4, -Math.PI/4);
 drawBeziers([10, 10, 200, 100, 10, 100, 70, 10], -Math.PI/4);
 drawRect();
 drawRoundRect();
