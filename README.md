@@ -2,13 +2,13 @@
 
 Rasterize, stroke and fill lines, rectangles, curves and paths. Even without canvas.
 
-**version: 0.9.92** (33 kB minified)
+**version: 1.0.0 in progress** (33 kB minified)
 
 **What is not supported:**
 
-1. `lineDash`/`lineDashOffset` (**will be** implemented)
-2. `strokeText`/`fillText`/`measureText` ..  (will **not** be implemented but can be done by drawing the actual curves in the font)
-3. `shadow`/`shadowBlur`/`shadowColor` .. (will **not** be implemented but is easy to do)
+1. `lineDash`/`lineDashOffset` (**will be** implemented, in progress)
+1. `strokeText`/`fillText`/`measureText` ..  (will **not** be implemented but can be done by drawing the actual curves in the font)
+2. `shadow`/`shadowBlur`/`shadowColor` .. (will **not** be implemented but is easy to do)
 
 **note:** extreme unequal scaling (eg `scale_x >> scale_y`) produces some artifacts
 

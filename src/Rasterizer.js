@@ -1532,7 +1532,7 @@ function add_dashes(start, end, points, dashes)
     {
         segments = [start.x, start.y, points[(start.i << 1) + 2], points[(start.i << 1) + 3], end.x, end.y];
     }
-    else if (!is_almost_equal(start.x, end.x, 1e-6) || !is_almost_equal(start.y, end.y, 1e-6))
+    else //if (!is_almost_equal(start.x, end.x, 1e-6) || !is_almost_equal(start.y, end.y, 1e-6))
     {
         segments = [start.x, start.y, end.x, end.y];
     }
@@ -1603,7 +1603,7 @@ function dashed_polyline(points, ld, ldo, pw)
         ++idx;
         if (idx >= ld.length) idx = 0;
     }
-    if ((0 < pos) && (is_on || sl))
+    if ((0 < pos) && (is_on || sl) && (!is_strictly_equal(endCut.x, end.x) || !is_strictly_equal(endCut.y, end.y)))
     {
         add_dashes(endCut.n || endCut, end, points, dashes);
     }

@@ -116,8 +116,8 @@ function drawPolyline(x1, y1, x2, y2, x3, y3, lw, ld, lc, lj, ml)
     canvas1.style.height = String(h)+'px';
     canvas2.style.width = String(w)+'px';
     canvas2.style.height = String(h)+'px';
-    test1.appendChild(text((1 < lw ? 'Thick PolyLine' : 'PolyLine')+' '+lj));
-    test2.appendChild(text((1 < lw ? 'Thick PolyLine' : 'PolyLine')+' '+lj));
+    test1.appendChild(text((1 < lw ? 'Thick ' : '')+(ld.length ? 'Dashed ' : '')+'PolyLine'+' '+lj));
+    test2.appendChild(text((1 < lw ? 'Thick ' : '')+(ld.length ? 'Dashed ' : '')+'PolyLine'+' '+lj));
     test1.appendChild(canvas1);
     test2.appendChild(canvas2);
 
@@ -921,6 +921,7 @@ drawPolyline(20, 10, 40, 60, 10, 70, 20, [], 'butt', 'round');
 drawPolyline(20, 70, 40, 10, 70, 60, 20, [], 'butt', 'round');
 drawPolyline(20, 10, 40, 70, 70, 20, 20, [], 'butt', 'round');
 drawPolyline(60, 20, 20, 20, 20, 60, 20, [0,[1,1]], 'butt', 'bevel');
+drawPolyline(60, 20, 20, 20, 20, 60, 20, [0,[0.1,0.1]], 'butt', 'bevel');
 drawPolyline(10, 10, 60, 10, 60, 60, 20, [0,[10,5]], 'butt', 'bevel');
 drawPolyline(20, 10, 20, 60, 60, 60, 20, [0,[10,5]], 'butt', 'bevel');
 drawPolyline(60, 10, 60, 60, 10, 60, 20, [0,[10,5]], 'butt', 'bevel');
