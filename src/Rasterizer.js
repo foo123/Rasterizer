@@ -1517,12 +1517,12 @@ function add_dashes(start, end, points, dashes)
     {
         segments = [];
         segments.push.apply(segments, points.slice((start.i+1) << 1, (end.i) << 1));
-        if (!is_almost_equal(start.x, segments[0], 1e-6) || !is_almost_equal(start.y, segments[1], 1e-6))
+        if (!is_strictly_equal(start.x, segments[0]) || !is_strictly_equal(start.y, segments[1]))
         {
             segments.unshift(start.n.y);
             segments.unshift(start.n.x);
         }
-        if (!is_almost_equal(end.x, segments[segments.length-2], 1e-6) || !is_almost_equal(end.y, segments[segments.length-1], 1e-6))
+        if (!is_strictly_equal(end.x, segments[segments.length-2]) || !is_strictly_equal(end.y, segments[segments.length-1]))
         {
             segments.push(end.x);
             segments.push(end.y);
@@ -1532,7 +1532,7 @@ function add_dashes(start, end, points, dashes)
     {
         segments = [start.x, start.y, points[(start.i << 1) + 2], points[(start.i << 1) + 3], end.x, end.y];
     }
-    else //if (!is_almost_equal(start.x, end.x, 1e-6) || !is_almost_equal(start.y, end.y, 1e-6))
+    else
     {
         segments = [start.x, start.y, end.x, end.y];
     }
@@ -1786,7 +1786,7 @@ function intersect(x1, y1, x2, y2, x3, y3, x4, y4)
     // zero, infinite or one point
     return is_strictly_equal(D, 0) ? false : {x:(b*m - c*l)/D, y:(c*k - a*m)/D};
 }
-function fill_rect(set_pixel, x1, y1, x2, y2, xmin, ymin, xmax, ymax)
+function fill_rect(set_pixel, x1, y1, x2, y2, xmin, ymin, xmax, ymax, alpha)
 {
     // fill a rectangular area between (x1,y1), (x2,y2) integer coords
     var x, y;
@@ -1811,23 +1811,24 @@ function fill_rect(set_pixel, x1, y1, x2, y2, xmin, ymin, xmax, ymax)
         x2 = stdMath.min(x2, xmax);
         y2 = stdMath.min(y2, ymax);
     }
+    if (null == alpha) alpha = 1;
     if (y1 === y2)
     {
-        for (x=x1; x<=x2; ++x) set_pixel(x, y1, 1);
+        for (x=x1; x<=x2; ++x) set_pixel(x, y1, alpha);
     }
     else if (x1 === x2)
     {
-        for (y=y1; y<=y2; ++y) set_pixel(x1, y, 1);
+        for (y=y1; y<=y2; ++y) set_pixel(x1, y, alpha);
     }
     else
     {
         for (y=y1; y<=y2; ++y)
         {
-            for (x=x1; x<=x2; ++x) set_pixel(x, y, 1);
+            for (x=x1; x<=x2; ++x) set_pixel(x, y, alpha);
         }
     }
 }
-function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax)
+function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax, alpha)
 {
     // fill the triangle defined by a, b, c points
     var x, xx, t,
@@ -1843,6 +1844,7 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
         stdMath.max(ay, by, cy) < ymin || stdMath.min(ay, by, cy) > ymax)
             return;
     }
+    if (null == alpha) alpha = 1;
     if (by < ay)
     {
         t = ay;
@@ -1877,7 +1879,7 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
         y = stdMath.round(ay);
         x = stdMath.round(stdMath.min(ax, bx, cx));
         xx = stdMath.round(stdMath.max(ax, bx, cx));
-        return fill_rect(set_pixel, x, y, xx, y, xmin, ymin, xmax, ymax);
+        return fill_rect(set_pixel, x, y, xx, y, xmin, ymin, xmax, ymax, alpha);
     }
     yab = by - ay;
     ybc = cy - by;
@@ -1932,10 +1934,10 @@ function fill_triangle(set_pixel, ax, ay, bx, by, cx, cy, xmin, ymin, xmax, ymax
         x = stdMath.round(x +  e);
         xx = stdMath.round(xx - e);
         if (clip) {x = stdMath.max(xmin, x); xx = stdMath.min(xmax, xx);}
-        for (; x<=xx; ++x) set_pixel(x, y, 1);
+        for (; x<=xx; ++x) set_pixel(x, y, alpha);
     }
 }
-function fill_trapezoid(set_pixel, ax, ay, bx, by, cx, cy, dx, dy, xmin, ymin, xmax, ymax)
+function fill_trapezoid(set_pixel, ax, ay, bx, by, cx, cy, dx, dy, xmin, ymin, xmax, ymax, alpha)
 {
     // fill the trapezoid defined by a, b, c, d, points in order
     var y = stdMath.min(ay, by, cy, dy),
@@ -1950,13 +1952,14 @@ function fill_trapezoid(set_pixel, ax, ay, bx, by, cx, cy, dx, dy, xmin, ymin, x
         if (yy < ymin || y > ymax || xx < xmin || x > xmax)
             return;
     }
+    if (null == alpha) alpha = 1;
     if (is_strictly_equal(y, yy))
     {
         // line or single point
         y = stdMath.round(y);
         x = stdMath.round(x);
         xx = stdMath.round(xx);
-        return fill_rect(set_pixel, x, y, xx, y, xmin, ymin, xmax, ymax);
+        return fill_rect(set_pixel, x, y, xx, y, xmin, ymin, xmax, ymax, alpha);
     }
     y = stdMath.round(y);
     yy = stdMath.round(yy);
@@ -2013,10 +2016,10 @@ function fill_trapezoid(set_pixel, ax, ay, bx, by, cx, cy, dx, dy, xmin, ymin, x
         x = stdMath.round(x + e);
         xx = stdMath.round(xx - e);
         if (clip) {x = stdMath.max(xmin, x); xx = stdMath.min(xmax, xx);}
-        for (; x<=xx; ++x) set_pixel(x, y, 1);
+        for (; x<=xx; ++x) set_pixel(x, y, alpha);
     }
 }
-function fill_sector(set_pixel, ax, ay, bx, by, px, py, r, xmin, ymin, xmax, ymax)
+function fill_sector(set_pixel, ax, ay, bx, by, px, py, r, xmin, ymin, xmax, ymax, alpha)
 {
     // fill circular sector with radius r defined by line a - b and point p
     var y, yy, x, xx, xi,
@@ -2040,8 +2043,9 @@ function fill_sector(set_pixel, ax, ay, bx, by, px, py, r, xmin, ymin, xmax, yma
     ccw = !((tp < t0 && tp < t1) || (tp > t0 && tp > t1) || (tp > t0 && tp < t1));
     p = arc_points(cx, cy, r, r, 0, ta, tb, ccw);
     m = p.length - 2;
+    if (null == alpha) alpha = 1;
     // outline of sector
-    for (i=0; i<m; i+=2) wu_line(set_pixel, p[i], p[i+1], p[i+2], p[i+3], null, null, 1, xmin, ymin, xmax, ymax);
+    for (i=0; i<m; i+=2) wu_line(set_pixel, p[i], p[i+1], p[i+2], p[i+3], null, null, alpha, xmin, ymin, xmax, ymax);
     p = path_to_segments([p]);
     y = stdMath.round(stdMath.min(ay, by, py, p.ymin));
     yy = stdMath.round(stdMath.max(ay, by, py, p.ymax));
@@ -2110,13 +2114,14 @@ function fill_sector(set_pixel, ax, ay, bx, by, px, py, r, xmin, ymin, xmax, yma
             x = stdMath.max(x, xmin);
             xx = stdMath.min(xx, xmax);
         }
-        for (; x<=xx; ++x) set_pixel(x, y, 1);
+        for (; x<=xx; ++x) set_pixel(x, y, alpha);
     }
 }
 function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, lw, xmin, ymin, xmax, ymax, gs, ge)
 {
     var xm = stdMath.min(xs, xe), xM = stdMath.max(xs, xe),
-        ym = stdMath.min(ys, ye), yM = stdMath.max(ys, ye);
+        ym = stdMath.min(ys, ye), yM = stdMath.max(ys, ye),
+        mult = 1 > lw ? lw : 1;
 
     // if line is outside viewport return
     if (xM < xmin || xm > xmax || yM < ymin || ym > ymax) return;
@@ -2140,7 +2145,7 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, lw, xmin, ymin, xmax, ymax, 
 
     if (is_strictly_equal(dx, 0) || is_strictly_equal(dy, 0))
     {
-        return fill_rect(set_pixel, stdMath.round(xs), stdMath.round(ys), stdMath.round(xe), stdMath.round(ye));
+        return fill_rect(set_pixel, stdMath.round(xs), stdMath.round(ys), stdMath.round(xe), stdMath.round(ye), null, null, null, null, mult);
     }
 
     // Wu's line algorithm
@@ -2155,8 +2160,7 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, lw, xmin, ymin, xmax, ymax, 
         rfpart = 0,
         gap = 0,
         e = 0.5,
-        steep = dy > dx,
-        mult = 1 > lw ? lw : 1;
+        steep = dy > dx;
 
     if (steep)
     {
@@ -2253,7 +2257,9 @@ function wu_thick_line(set_pixel, xs, ys, xe, ye, dx, dy, wx, wy, cs, ce, lw, xm
     var t, sx, sy,
         wsx, wsy,
         xa, xb, xc, xd,
-        ya, yb, yc, yd;
+        ya, yb, yc, yd,
+        h = hypot(xe-xs, ye-ys),
+        mult = 1 > h ? h : 1;
 
     if (xs > xe)
     {
@@ -2277,13 +2283,13 @@ function wu_thick_line(set_pixel, xs, ys, xe, ye, dx, dy, wx, wy, cs, ce, lw, xm
         if ('square' === ce) ye += sy*wx;
         if ('round' === cs)
         {
-            fill_sector(set_pixel, xs-wx, ys, xs+wx, ys, xs, ys-sy*wx, wx, xmin, ymin, xmax, ymax);
+            fill_sector(set_pixel, xs-wx, ys, xs+wx, ys, xs, ys-sy*wx, wx, xmin, ymin, xmax, ymax, mult);
         }
         if ('round' === ce)
         {
-            fill_sector(set_pixel, xe-wx, ye, xe+wx, ye, xe, ye+sy*wx, wx, xmin, ymin, xmax, ymax);
+            fill_sector(set_pixel, xe-wx, ye, xe+wx, ye, xe, ye+sy*wx, wx, xmin, ymin, xmax, ymax, mult);
         }
-        return fill_rect(set_pixel, stdMath.round(xs - wx), stdMath.round(ys), stdMath.round(xs + wx), stdMath.round(ye), xmin, ymin, xmax, ymax);
+        return fill_rect(set_pixel, stdMath.round(xs - wx), stdMath.round(ys), stdMath.round(xs + wx), stdMath.round(ye), xmin, ymin, xmax, ymax, mult);
     }
     if (is_strictly_equal(dy, 0))
     {
@@ -2291,13 +2297,13 @@ function wu_thick_line(set_pixel, xs, ys, xe, ye, dx, dy, wx, wy, cs, ce, lw, xm
         if ('square' === ce) xe += sx*wy;
         if ('round' === cs)
         {
-            fill_sector(set_pixel, xs, ys-wy, xs, ys+wy, xs-wy, ys, wy, xmin, ymin, xmax, ymax);
+            fill_sector(set_pixel, xs, ys-wy, xs, ys+wy, xs-wy, ys, wy, xmin, ymin, xmax, ymax, mult);
         }
         if ('round' === ce)
         {
-            fill_sector(set_pixel, xe, ye-wy, xe, ye+wy, xe+wy, ye, wy, xmin, ymin, xmax, ymax);
+            fill_sector(set_pixel, xe, ye-wy, xe, ye+wy, xe+wy, ye, wy, xmin, ymin, xmax, ymax, mult);
         }
-        return fill_rect(set_pixel, stdMath.round(xs), stdMath.round(ys - wy), stdMath.round(xe), stdMath.round(ys + wy), xmin, ymin, xmax, ymax);
+        return fill_rect(set_pixel, stdMath.round(xs), stdMath.round(ys - wy), stdMath.round(xe), stdMath.round(ys + wy), xmin, ymin, xmax, ymax, mult);
     }
 
     if ('square' === cs) {xs -= sx*wy; ys -= sy*wx;}
@@ -2339,26 +2345,26 @@ g: ye - wsy - (ye+wsy) = -m*(x - (xe-wsx)) => x = xe + 2wsy/m - wsx: (xe + 2wsy/
     // outline
     if ('round' === cs)
     {
-        fill_sector(set_pixel, xa, ya, xb, yb, (xa-sx*wy+xb-sx*wy)/2, (ya-sy*wx+yb-sy*wx)/2, lw, xmin, ymin, xmax, ymax)
+        fill_sector(set_pixel, xa, ya, xb, yb, (xa-sx*wy+xb-sx*wy)/2, (ya-sy*wx+yb-sy*wx)/2, lw, xmin, ymin, xmax, ymax, mult)
     }
     else
     {
-        wu_line(set_pixel, xa, ya, xb, yb, null, null, 1, xmin, ymin, xmax, ymax);
+        wu_line(set_pixel, xa, ya, xb, yb, null, null, mult, xmin, ymin, xmax, ymax);
     }
-    wu_line(set_pixel, xb, yb, xd, yd, null, null, 1, xmin, ymin, xmax, ymax);
+    wu_line(set_pixel, xb, yb, xd, yd, null, null, mult, xmin, ymin, xmax, ymax);
     if ('round' === ce)
     {
-        fill_sector(set_pixel, xd, yd, xc, yc, (xc+sx*wy+xd+sx*wy)/2, (yc+sy*wx+yd+sy*wx)/2, lw, xmin, ymin, xmax, ymax)
+        fill_sector(set_pixel, xd, yd, xc, yc, (xc+sx*wy+xd+sx*wy)/2, (yc+sy*wx+yd+sy*wx)/2, lw, xmin, ymin, xmax, ymax, mult)
     }
     else
     {
-        wu_line(set_pixel, xd, yd, xc, yc, null, null, 1, xmin, ymin, xmax, ymax);
+        wu_line(set_pixel, xd, yd, xc, yc, null, null, mult, xmin, ymin, xmax, ymax);
     }
-    wu_line(set_pixel, xc, yc, xa, ya, null, null, 1, xmin, ymin, xmax, ymax);
+    wu_line(set_pixel, xc, yc, xa, ya, null, null, mult, xmin, ymin, xmax, ymax);
     // fill
-    /*fill_triangle(set_pixel, xa, ya, xb, yb, xc, yc, xmin, ymin, xmax, ymax);
-    fill_triangle(set_pixel, xb, yb, xc, yc, xd, yd, xmin, ymin, xmax, ymax);*/
-    fill_trapezoid(set_pixel, xa, ya, xb, yb, xd, yd, xc, yc, xmin, ymin, xmax, ymax);
+    /*fill_triangle(set_pixel, xa, ya, xb, yb, xc, yc, xmin, ymin, xmax, ymax, mult);
+    fill_triangle(set_pixel, xb, yb, xc, yc, xd, yd, xmin, ymin, xmax, ymax, mult);*/
+    fill_trapezoid(set_pixel, xa, ya, xb, yb, xd, yd, xc, yc, xmin, ymin, xmax, ymax, mult);
 }
 function join_lines(set_pixel, x1, y1, x2, y2, x3, y3, dx1, dy1, wx1, wy1, dx2, dy2, wx2, wy2, j, ml, xmin, ymin, xmax, ymax)
 {
