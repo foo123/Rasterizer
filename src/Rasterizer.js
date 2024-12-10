@@ -1547,7 +1547,7 @@ function dashed_polyline(points, ld, ldo, pw)
         start = {x:points[0],y:points[1],i:0,l:0,p:null,n:null},
         startCut = {x:0,y:0,i:0,l:0,p:null,n:null},
         endCut = {x:0,y:0,i:0,l:0,p:null,n:null},
-        offset, pos, idx, sl, is_on,
+        offset, pos, idx, sl, is_on, is_left = 0,
         dashes = [];
     for (sw=0,j=0,i=0; i+2<n; i+=2)
     {
@@ -1573,6 +1573,7 @@ function dashed_polyline(points, ld, ldo, pw)
         ++idx;
         sl = ld[idx];
         dash_endpoint(l, points, pos, start, startCut, pos+sl > 0);
+        is_left = 1;
         pos += sl;
         if (0 <= pos)
         {
@@ -1582,12 +1583,14 @@ function dashed_polyline(points, ld, ldo, pw)
             }
             else
             {
-                endCut.i = ls-1;
-                endCut.l = sw;
-                endCut.x = points[n-2];
-                endCut.y = points[n-1];
-                endCut.p = null;
-                endCut.n = null;
+                endCut = {
+                i: ls-1,
+                l: sw,
+                x: points[n-2],
+                y: points[n-1],
+                p: null,
+                n: null
+                };
             }
             if (is_on || sl)
             {
@@ -1604,6 +1607,17 @@ function dashed_polyline(points, ld, ldo, pw)
         if (sl) is_on = 0;
         ++idx;
         if (idx >= ld.length) idx = 0;
+    }
+    if (0 < pos && (is_on || sl))
+    {
+        add_dash(endCut.n || endCut, {
+                i: ls-1,
+                l: sw,
+                x: points[n-2],
+                y: points[n-1],
+                p: null,
+                n: null
+                }, points, dashes);
     }
     return dashes;
 }
