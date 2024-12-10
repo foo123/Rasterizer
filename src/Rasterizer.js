@@ -1447,25 +1447,24 @@ function add_arcto(p, x0, y0, x1, y1, x2, y2, r, transform)
 {
     p.push.apply(p, arc2_points(x0, y0, x1, y1, x2, y2, r, transform));
 }
-function dash_endpoint(l, points, pos, pt0, pt, toz)
+function dash_endpoint(l, dt, points, pos, pt0, pt, toz)
 {
-    for (var s=pt0.l,t,dt,k,j=pt0.i,ls=l.length; j<ls; ++j)
+    for (var s=pt0.l,t,k,j=pt0.i,ls=l.length; j<ls; ++j)
     {
         if (0 < l[j] && s + l[j] >= pos)
         {
             t = (pos-s)/l[j];
-            dt = 1/l[j];
-            if ((0 > t) && toz) t = 0;
+            if ((0.0 > t) && toz) t = 0.0;
             k = j << 1;
             pt.i = j;
             pt.l = s;
-            if (is_almost_equal(t, 0, 1e-6))
+            if (t < 0.0+dt)
             {
                 pt.p = null;
                 pt.n = {
                     i: j,
-                    x: +points[k]+(points[k+2]-points[k])*(0+dt),
-                    y: +points[k+1]+(points[k+3]-points[k+1])*(0+dt)
+                    x: +points[k]+(points[k+2]-points[k])*(0.0+dt),
+                    y: +points[k+1]+(points[k+3]-points[k+1])*(0.0+dt)
                 };
                 pt.x = points[k];
                 pt.y = points[k+1];
@@ -1475,13 +1474,13 @@ function dash_endpoint(l, points, pos, pt0, pt, toz)
                     pt.x.params.yp = points[k-1];
                 }
             }
-            else if (is_almost_equal(t, 1, 1e-6))
+            else if (t > 1.0-dt)
             {
                 pt.n = null;
                 pt.p = {
                     i: j,
-                    x: +points[k]+(points[k+2]-points[k])*(1-dt),
-                    y: +points[k+1]+(points[k+3]-points[k+1])*(1-dt)
+                    x: +points[k]+(points[k+2]-points[k])*(1.0-dt),
+                    y: +points[k+1]+(points[k+3]-points[k+1])*(1.0-dt)
                 };
                 pt.x = points[k+2];
                 pt.y = points[k+3];
@@ -1493,12 +1492,12 @@ function dash_endpoint(l, points, pos, pt0, pt, toz)
             }
             else
             {
-                pt.p = 0 <= t-dt ? {
+                pt.p = 0.0 <= t-dt ? {
                     i: j,
                     x: +points[k]+(points[k+2]-points[k])*(t-dt),
                     y: +points[k+1]+(points[k+3]-points[k+1])*(t-dt)
                 } : null;
-                pt.n = 1 >= t+dt ? {
+                pt.n = 1.0 >= t+dt ? {
                     i: j,
                     x: +points[k]+(points[k+2]-points[k])*(t+dt),
                     y: +points[k+1]+(points[k+3]-points[k+1])*(t+dt)
@@ -1511,7 +1510,7 @@ function dash_endpoint(l, points, pos, pt0, pt, toz)
         s += l[j];
     }
 }
-function add_dash(start, end, points, dashes)
+function add_dashes(start, end, points, dashes)
 {
     var segments = null;
     if (start.i+1 < end.i)
@@ -1541,29 +1540,28 @@ function add_dash(start, end, points, dashes)
 }
 function dashed_polyline(points, ld, ldo, pw)
 {
-    var n = points.length, ls = (n >>> 1) - 1,
+    var n = points.length,
+        ls = (n >>> 1) - 1,
         l = new Array(ls),
-        i, j, sw, x1, y1, x2, y2, dx2, dy2,
-        start = {x:points[0],y:points[1],i:0,l:0,p:null,n:null},
-        startCut = {x:0,y:0,i:0,l:0,p:null,n:null},
-        endCut = {x:0,y:0,i:0,l:0,p:null,n:null},
-        offset, pos, idx, sl, is_on, is_left = 0,
-        dashes = [];
+        i, j, idx, dt, sw, sl,
+        start, end, startCut, endCut,
+        offset, pos, is_on, dashes = [];
     for (sw=0,j=0,i=0; i+2<n; i+=2)
     {
-        x1 = points[i]; y1 = points[i+1];
-        x2 = points[i+2]; y2 = points[i+3];
-        dx2 = stdMath.abs(x2 - x1);
-        dy2 = stdMath.abs(y2 - y1);
-        sl = stdMath.sqrt(dx2*dx2 + dy2*dy2);
+        sl = hypot(+points[i+2]-points[i], +points[i+3]-points[i+1]);
         sw += sl; l[j++] = sl;
     }
+    dt = 1.0/sw;
     offset = ldo;
     while (offset > pw) offset -= pw;
     while (offset < 0)  offset += pw;
     pos = -offset;
     idx = 0;
-    is_on = 0; // off
+    is_on = 0;
+    start = {x:points[0],y:points[1],i:0,l:0,p:null,n:null};
+    end = {x:points[n-2],y:points[n-1],i:ls-1,l:sw,p:null,n:null};
+    startCut = {x:0,y:0,i:0,l:0,p:null,n:null};
+    endCut = {x:0,y:0,i:0,l:0,p:null,n:null};
     while (1)
     {
         sl = ld[idx];
@@ -1572,29 +1570,26 @@ function dashed_polyline(points, ld, ldo, pw)
         if (sl) is_on = 1;
         ++idx;
         sl = ld[idx];
-        dash_endpoint(l, points, pos, start, startCut, pos+sl > 0);
-        is_left = 1;
+        dash_endpoint(l, dt, points, pos, start, startCut, pos+sl > 0);
         pos += sl;
         if (0 <= pos)
         {
             if (pos < sw)
             {
-                dash_endpoint(l, points, pos, startCut, endCut, pos > 0);
+                dash_endpoint(l, dt, points, pos, startCut, endCut, pos > 0);
             }
             else
             {
-                endCut = {
-                i: ls-1,
-                l: sw,
-                x: points[n-2],
-                y: points[n-1],
-                p: null,
-                n: null
-                };
+                endCut.i = end.i;
+                endCut.l = end.l;
+                endCut.x = end.x;
+                endCut.y = end.y;
+                endCut.p = end.p;
+                endCut.n = end.n;
             }
             if (is_on || sl)
             {
-                add_dash(start, startCut.p || startCut, points, dashes);
+                add_dashes(start.n || start, startCut.p || startCut, points, dashes);
                 start.i = endCut.i;
                 start.l = endCut.l;
                 start.x = endCut.x;
@@ -1608,16 +1603,9 @@ function dashed_polyline(points, ld, ldo, pw)
         ++idx;
         if (idx >= ld.length) idx = 0;
     }
-    if (0 < pos && (is_on || sl))
+    if ((0 < pos) && (is_on || sl))
     {
-        add_dash(endCut.n || endCut, {
-                i: ls-1,
-                l: sw,
-                x: points[n-2],
-                y: points[n-1],
-                p: null,
-                n: null
-                }, points, dashes);
+        add_dashes(endCut.n || endCut, end, points, dashes);
     }
     return dashes;
 }
@@ -1643,7 +1631,7 @@ function stroke_polyline(set_pixel, points, lw, lc1, lc2, lj, ml, sx, sy, xmin, 
             {
                 ljj = true === x1.params.lineJoin ? lj : x1.params.lineJoin;
                 dx1 = stdMath.abs(x1 - x1.params.xp);
-                dy1 = stdMath.abs(y1 - x2.params.yp);
+                dy1 = stdMath.abs(y1 - x1.params.yp);
                 join_lines(set_pixel, x1.params.xp, x1.params.yp, x1, y1, x2, y2, dx1, dy1, w2[0], w2[1], dx2, dy2, w2[0], w2[1], ljj, ml, xmin, ymin, xmax, ymax);
             }
             if (x2.params && x2.params.lineJoin && null != x2.params.xp)
