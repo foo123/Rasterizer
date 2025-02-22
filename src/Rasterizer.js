@@ -20,8 +20,8 @@ else if (!(name in root)) /* Browser/WebWorker/.. */
 "use strict";
 
 var def = Object.defineProperty, PROTO = 'prototype',
-    stdMath = Math, INF = Infinity, sqrt2 = stdMath.sqrt(2),
-    is_nan = isNaN, is_finite = isFinite,
+    stdMath = Math, INF = Infinity, EPSILON = Number.EPSILON,
+    sqrt2 = stdMath.sqrt(2), is_nan = isNaN, is_finite = isFinite,
     PI = stdMath.PI, TWO_PI = 2*PI, HALF_PI = PI/2,
     NUM_POINTS = 6, MIN_LEN = sqrt2, PIXEL_SIZE = 0.5,
     ImArray = 'undefined' !== typeof Uint8ClampedArray ? Uint8ClampedArray : ('undefined' !== typeof Uint8Array ? Uint8Array : Array),
@@ -1520,7 +1520,7 @@ function dashed_polyline(points, ld, ldo, pw)
         is_on = !(idx & 1);
         if (is_on && (0 < pos+sl) && (0 < sl))
         {
-            dash_endpoint(l, points, stdMath.max(0, pos+(1 <= sl ? 1 : 0)), start);
+            dash_endpoint(l, points, stdMath.max(0, pos+(1 <= sl ? 1 : EPSILON)), start);
             dash_endpoint(l, points, stdMath.max(0, pos+sl), end);
             segments = null;
             if (start.i+1 < end.i)
@@ -1555,8 +1555,9 @@ function dashed_polyline(points, ld, ldo, pw)
             else if (start.i === end.i)
             {
                 segments = [start.x, start.y, end.x, end.y];
-                segments.dx = +points[(end.i << 1) + 2]-points[(end.i << 1) + 0];
-                segments.dy = +points[(end.i << 1) + 3]-points[(end.i << 1) + 1];
+                segments.dx = stdMath.abs(+points[(end.i << 1) + 2]-points[(end.i << 1) + 0]);
+                segments.dy = stdMath.abs(+points[(end.i << 1) + 3]-points[(end.i << 1) + 1]);
+                segments.mult = stdMath.max(0.49, 1 > sl ? sl : 1);
             }
             if (segments && segments.length) dashes.push(segments);
         }
@@ -1580,7 +1581,7 @@ function stroke_polyline(set_pixel, points, lw, lc1, lc2, lj, ml, sx, sy, xmin, 
         dx2 = stdMath.abs(x2 - x1);
         dy2 = stdMath.abs(y2 - y1);
         w2 = ww(lw, dx2, dy2, sx, sy, points.dx, points.dy);
-        mult = stroke_line(set_pixel, x1, y1, x2, y2, dx2, dy2, w2[0], w2[1], lc1, lc2, lw, xmin, ymin, xmax, ymax, points.dx, points.dy);
+        mult = stroke_line(set_pixel, x1, y1, x2, y2, dx2, dy2, w2[0], w2[1], lc1, lc2, lw, xmin, ymin, xmax, ymax, points.dx, points.dy, points.mult);
         if (0 < w2[0] || 0 < w2[1])
         {
             if (x1.params && x1.params.lineJoin && null != x1.params.xp)
@@ -1639,7 +1640,7 @@ function stroke_polyline(set_pixel, points, lw, lc1, lc2, lj, ml, sx, sy, xmin, 
         }
     }
 }
-function stroke_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, lw, xmin, ymin, xmax, ymax, dx0, dy0)
+function stroke_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, lw, xmin, ymin, xmax, ymax, dx0, dy0, mult0)
 {
     if (0 === wx && 0 === wy)
     {
@@ -1647,7 +1648,7 @@ function stroke_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, lw, xmin
     }
     else
     {
-        return wu_thick_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, lw, xmin, ymin, xmax, ymax, dx0, dy0);
+        return wu_thick_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, lw, xmin, ymin, xmax, ymax, dx0, dy0, mult0);
     }
 }
 function ww(w, dx, dy, sx, sy, dx0, dy0)
@@ -1656,21 +1657,26 @@ function ww(w, dx, dy, sx, sy, dx0, dy0)
     w2 = stdMath.max(0, (w-1)/2);
     ox = 1 === sx ? 0 : sx/2;
     oy = 1 === sy ? 0 : sy/2;
+    if (!dx && !dy && (null != dx0))
+    {
+        dx = dx0;
+        dy = dy0;
+    }
     if (0.5 > sx*w2+ox && 0.5 > sy*w2+oy)
     {
         wxy = [0, 0];
     }
-    else if (is_strictly_equal(dx, 0) && (null == dx0 || 0 === dx0))
+    else if (is_strictly_equal(dx, 0))
     {
         wxy = [sx*w2+ox, 0];
     }
-    else if (is_strictly_equal(dy, 0) && (null == dy0 || 0 === dy0))
+    else if (is_strictly_equal(dy, 0))
     {
         wxy = [0, sy*w2+oy];
     }
     else
     {
-        n = !dx && !dy && (null != dx0) ? hypot(dx0, dy0) : hypot(dx, dy);
+        n = hypot(dx, dy);
         wxy = [(sx*w2+ox)*dy/n, (sy*w2+oy)*dx/n];
     }
     return wxy;
@@ -2211,7 +2217,7 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, lw, xmin, ymin, xmax, ymax, 
     }
     return mult;
 }
-function wu_thick_line(set_pixel, xs, ys, xe, ye, dx, dy, wx, wy, cs, ce, lw, xmin, ymin, xmax, ymax, dx0, dy0)
+function wu_thick_line(set_pixel, xs, ys, xe, ye, dx, dy, wx, wy, cs, ce, lw, xmin, ymin, xmax, ymax, dx0, dy0, mult0)
 {
     var t, sx, sy,
         wsx, wsy,
@@ -2219,6 +2225,8 @@ function wu_thick_line(set_pixel, xs, ys, xe, ye, dx, dy, wx, wy, cs, ce, lw, xm
         ya, yb, yc, yd,
         h = hypot(dx, dy),
         mult = (1 > h ? h : 1) || 1;
+
+    if (null != mult0 && 1 > mult0 && 0 < mult0 /*&& mult > mult0*/) mult = mult0;
 
     if (xs > xe)
     {
@@ -3327,7 +3335,7 @@ function is_almost_equal(a, b, eps)
 }
 function is_strictly_equal(a, b)
 {
-    return stdMath.abs(a - b) < Number.EPSILON;
+    return stdMath.abs(a - b) < EPSILON;
 }
 function clamp(x, min, max)
 {
