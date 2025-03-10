@@ -1452,13 +1452,13 @@ function dash_endpoint(points, len, pos, pt)
 {
     for (var t,k,s=pt.l||0,j=pt.i||0,ls=len.length; j<ls; ++j)
     {
-        if (0 < len[j] && s + len[j] > pos)
+        if (0 < len[j] && s + len[j] >= pos)
         {
             k = j << 1;
             pt.i = j;
             pt.l = s;
             t = clamp((pos-s)/len[j], 0, 1);
-            if (0+EPSILON >= t)
+            if (0+EPSILON > t)
             {
                 pt.x = points[k+0];
                 pt.y = points[k+1];
@@ -1474,7 +1474,7 @@ function dash_endpoint(points, len, pos, pt)
                     pt.y = +pt.y;
                 }
             }
-            else if (1-EPSILON <= t)
+            else if (1-EPSILON < t)
             {
                 pt.x = points[k+2];
                 pt.y = points[k+3];
@@ -1511,7 +1511,8 @@ function dashed_polyline(points, ld, ldo, pw)
     var n = points.length,
         ls = (n >>> 1) - 1,
         len = new Array(ls),
-        i, j, idx, sw, dt, sl,
+        i, j, idx, sw, dx, dy, dt,
+        sl, gl, sli, slm,
         start, end, offset, pos, pos0,
         is_on, segments, dashes = [];
     for (sw=0,j=0,i=0; i+2<n; i+=2)
@@ -1519,9 +1520,11 @@ function dashed_polyline(points, ld, ldo, pw)
         sl = hypot(+points[i+2]-points[i], +points[i+3]-points[i+1]);
         sw += sl; len[j++] = sl;
     }
+    slm = ld.reduce(function(slm, sl) {return stdMath.min(slm, sl);}, INF);
+    if (slm >= 1) slm = 1;
     start = {x:points[0],y:points[1],i:0,l:0};
     end = {x:points[n-2],y:points[n-1],i:0,l:0};
-    offset = ldo;
+    offset = ldo/slm;
     while (offset > pw) offset -= pw;
     while (offset < 0)  offset += pw;
     idx = 0;
@@ -1529,13 +1532,13 @@ function dashed_polyline(points, ld, ldo, pw)
     pos0 = pos;
     for (;pos < sw;)
     {
-        sl = ld[idx];
-        is_on = !(idx & 1);
-        if (is_on && (0 < sl) && (0 <= pos+sl))
+        sl = ld[idx]/slm; // dash
+        gl = ld[idx+1]/slm; // gap
+        if ((0 < sl) && (0 < pos+sl))
         {
             dash_endpoint(points, len, clamp(pos, 0, sw), start);
-            dash_endpoint(points, len, clamp(pos+sl-(1 <= sl ? 1 : 0), 0, sw), end);
-            segments = null;
+            dash_endpoint(points, len, clamp(pos+sl-1, 0, sw), end);
+            segments = null; dx = dy = null;
             if (start.i+1 < end.i)
             {
                 segments = [];
@@ -1553,8 +1556,8 @@ function dashed_polyline(points, ld, ldo, pw)
             }
             else if (start.i < end.i)
             {
-                segments = [points[(start.i << 1) + 2], points[(start.i << 1) + 3]];
-                if (!is_strictly_equal(start.x, segments[0]) || !is_strictly_equal(start.y, segments[1]))
+                segments = [start.x, start.y, points[(start.i << 1) + 2], points[(start.i << 1) + 3], end.x, end.y];
+                /*if (!is_strictly_equal(start.x, segments[0]) || !is_strictly_equal(start.y, segments[1]))
                 {
                     segments.unshift(start.y);
                     segments.unshift(start.x);
@@ -1563,22 +1566,25 @@ function dashed_polyline(points, ld, ldo, pw)
                 {
                     segments.push(end.x);
                     segments.push(end.y);
-                }
+                }*/
             }
             else if (start.i === end.i)
             {
                 segments = [start.x, start.y, end.x, end.y];
-                segments.dx = (+points[(end.i << 1) + 2]-points[(end.i << 1) + 0]);
-                segments.dy = (+points[(end.i << 1) + 3]-points[(end.i << 1) + 1]);
+                dx = (+points[(end.i << 1) + 2]-points[(end.i << 1) + 0]);
+                dy = (+points[(end.i << 1) + 3]-points[(end.i << 1) + 1]);
             }
             if (segments && segments.length)
             {
-                segments.mult = stdMath.max(0.1, 1 > sl ? sl : 1);
+                segments.dx = dx;
+                segments.dy = dy;
+                segments.mult = stdMath.max(0.5, 1 > ld[idx] ? ld[idx] : 1);
                 dashes.push(segments);
             }
         }
         if (0 < sl) pos += sl;
-        ++idx; if (idx >= ld.length) {idx = 0; if (pos <= pos0) break;}
+        if (0 < gl) pos += gl;
+        idx+=2; if (idx >= ld.length) {idx = 0; if (pos <= pos0) break;}
     }
     return dashes;
 }
@@ -1600,7 +1606,7 @@ function stroke_polyline(set_pixel, points, lw, lc1, lc2, lj, ml, sx, sy, xmin, 
         mult = stroke_line(set_pixel, x1, y1, x2, y2, dx2, dy2, w2[0], w2[1], lc1, lc2, lw, xmin, ymin, xmax, ymax, points.dx, points.dy, points.mult);
         if (0 < w2[0] || 0 < w2[1])
         {
-            if (x1.params && x1.params.lineJoin && (null != x1.params.xp || null != x1.params.xn))
+            if (x1.params && x1.params.lineJoin && (null != x1.params.xp && null != x1.params.xn))
             {
                 ljj = true === x1.params.lineJoin ? lj : x1.params.lineJoin;
                 xp = +(null != x1.params.xp ? x1.params.xp : x1);
@@ -1615,7 +1621,7 @@ function stroke_polyline(set_pixel, points, lw, lc1, lc2, lj, ml, sx, sy, xmin, 
                 dy2 = stdMath.abs(yn - y1);
                 join_lines(set_pixel, xp, yp, x1, y1, xn, yn, dx1, dy1, w2[0], w2[1], dx2, dy2, w2[0], w2[1], ljj, ml, xmin, ymin, xmax, ymax, mult);
             }
-            if (x2.params && x2.params.lineJoin && (null != x2.params.xp || null != x2.params.xn))
+            if (x2.params && x2.params.lineJoin && (null != x2.params.xp && null != x2.params.xn))
             {
                 ljj = true === x2.params.lineJoin ? lj : x2.params.lineJoin;
                 xp = +(null != x2.params.xp ? x2.params.xp : x2);
@@ -1630,6 +1636,18 @@ function stroke_polyline(set_pixel, points, lw, lc1, lc2, lj, ml, sx, sy, xmin, 
                 dy1 = stdMath.abs(yn - y2);
                 join_lines(set_pixel, xp, yp, x2, y2, xn, yn, dx2, dy2, w2[0], w2[1], dx1, dy1, w2[0], w2[1], ljj, ml, xmin, ymin, xmax, ymax, mult);
             }
+            /*if (x2.params && x2.params.join)
+            {
+                xp = x2.params.join[0];
+                yp = x2.params.join[1];
+                dx1 = stdMath.abs(xp - x2);
+                dy1 = stdMath.abs(yp - y2);
+                w1 = ww(lw, dx1, dy1, sx, sy);
+                if (0 < w1[0] || 0 < w1[1] || 0 < w2[0] || 0 < w2[1])
+                {
+                    join_lines(set_pixel, x1, y1, x2, y2, xp, yp, dx2, dy2, w1[0], w1[1], dx1, dy1, w1[0], w1[1], ljj, ml, xmin, ymin, xmax, ymax, mult);
+                }
+            }*/
         }
     }
     else
@@ -1646,7 +1664,7 @@ function stroke_polyline(set_pixel, points, lw, lc1, lc2, lj, ml, sx, sy, xmin, 
             w2 = ww(lw, dx2, dy2, sx, sy);
             if (x1.params && x1.params.lineCap) lcc1 = true === x1.params.lineCap ? lc1 : x1.params.lineCap;
             if (x2.params && x2.params.lineCap) lcc2 = true === x2.params.lineCap ? lc2 : x2.params.lineCap;
-            mult = stdMath.max(mult, stroke_line(set_pixel, x1, y1, x2, y2, dx2, dy2, w2[0], w2[1], 0 === i ? lcc1 : null, n === i+2 ? lcc2 : null, lw, xmin, ymin, xmax, ymax));
+            mult = stdMath.max(mult, stroke_line(set_pixel, x1, y1, x2, y2, dx2, dy2, w2[0], w2[1], 0 === i ? lcc1 : null, n === i+2 ? lcc2 : null, lw, xmin, ymin, xmax, ymax, null, null, points.mult));
             if (0 < i && (0 < w1[0] || 0 < w1[1] || 0 < w2[0] || 0 < w2[1]))
             {
                 if (x1.params && x1.params.lineJoin) ljj = true === x1.params.lineJoin ? lj : x1.params.lineJoin;
@@ -1676,11 +1694,11 @@ function stroke_line(set_pixel, x1, y1, x2, y2, dx, dy, wx, wy, c1, c2, lw, xmin
 {
     if (0 === wx && 0 === wy)
     {
-        return wu_line(set_pixel, x1, y1, x2, y2, dx, dy, lw, xmin, ymin, xmax, ymax, true, true);
+        return wu_line(set_pixel, x1, y1, x2, y2, dx, dy, lw, xmin, ymin, xmax, ymax, true, true, mult0);
     }
     else if (0 === dx && 0 === dy && null != dx0)
     {
-        return wu_line(set_pixel, x1-wx, y1-(dx0*dy0<0 ? 1 : -1)*wy, x2+wx, y2+(dx0*dy0<0 ? 1 : -1)*wy, 2*wx, 2*wy, 1, xmin, ymin, xmax, ymax, false, false);
+        return wu_line(set_pixel, x1-wx, y1-(dx0*dy0<0 ? 1 : -1)*wy, x2+wx, y2+(dx0*dy0<0 ? 1 : -1)*wy, 2*wx, 2*wy, 1, xmin, ymin, xmax, ymax, false, false, mult0);
     }
     else
     {
@@ -2115,11 +2133,13 @@ function fill_sector(set_pixel, ax, ay, bx, by, px, py, r, xmin, ymin, xmax, yma
         for (; x<=xx; ++x) set_pixel(x, y, alpha);
     }
 }
-function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, lw, xmin, ymin, xmax, ymax, gs, ge)
+function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, lw, xmin, ymin, xmax, ymax, gs, ge, mult0)
 {
     var xm = stdMath.min(xs, xe), xM = stdMath.max(xs, xe),
         ym = stdMath.min(ys, ye), yM = stdMath.max(ys, ye),
         mult = 1 > lw ? lw : 1;
+
+    if (null != mult0 && mult0 < mult) mult = mult0;
 
     if (!mult) return mult;
     // if line is outside viewport return
