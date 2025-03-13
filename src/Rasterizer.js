@@ -1462,7 +1462,7 @@ function dash_endpoint(points, len, pos, pt)
             {
                 pt.x = points[k+0];
                 pt.y = points[k+1];
-                if (0 < k)
+                if (0 < k && !pt.x.params)
                 {
                     pt.x = new Marker(+pt.x, {
                         xp:+points[k-2],
@@ -1478,7 +1478,7 @@ function dash_endpoint(points, len, pos, pt)
             {
                 pt.x = points[k+2];
                 pt.y = points[k+3];
-                if (k+4 < points.length)
+                if (k+4 < points.length && !pt.x.params)
                 {
                     pt.x = new Marker(+pt.x, {
                         xp:+points[k+0],
@@ -1605,7 +1605,7 @@ function stroke_polyline(set_pixel, points, lw, lc1, lc2, lj, ml, sx, sy, xmin, 
         alpha = stroke_line(set_pixel, +x1, +y1, +x2, +y2, dx2, dy2, w2[0], w2[1], lc1, lc2, lw, xmin, ymin, xmax, ymax, dx0, dy0, points.alpha);
         if (0 < w2[0] || 0 < w2[1])
         {
-            if (x1.params && x1.params.lineJoin && (null != x1.params.xp && null != x1.params.xn))
+            /*if (x1.params && x1.params.lineJoin && (null != x1.params.xp && null != x1.params.xn))
             {
                 ljj = true === x1.params.lineJoin ? lj : x1.params.lineJoin;
                 xp = +(null != x1.params.xp ? x1.params.xp : x1);
@@ -1634,19 +1634,19 @@ function stroke_polyline(set_pixel, points, lw, lc1, lc2, lj, ml, sx, sy, xmin, 
                 dx1 = stdMath.abs(xn - x2);
                 dy1 = stdMath.abs(yn - y2);
                 join_lines(set_pixel, +xp, +yp, +x2, +y2, +xn, +yn, dx2, dy2, w2[0], w2[1], dx1, dy1, w2[0], w2[1], ljj, ml, xmin, ymin, xmax, ymax, alpha);
-            }
+            }*/
             if (x2.params && x2.params.join)
             {
                 xp = x2.params.join[0];
                 yp = x2.params.join[1];
                 dx1 = stdMath.abs(xp - x2);
                 dy1 = stdMath.abs(yp - y2);
-                dx00 = null == yp.dx ? y2.dx : yp.dx;
-                dy00 = null == yp.dy ? y2.dy : yp.dy;
-                w1 = ww(lw, dx1, dy1, sx, sy, dx0, dy0);
+                dx00 = null;
+                dy00 = null;
+                w1 = ww(lw, dx1, dy1, sx, sy, dx00, dy00);
                 if (0 < w1[0] || 0 < w1[1] || 0 < w2[0] || 0 < w2[1])
                 {
-                    join_lines(set_pixel, +x1, +y1, +x2, +y2, +xp, +yp, dx0 || dx2, dy0 || dy2, w1[0], w1[1], dx00 || dx1, dy00 || dy1, w1[0], w1[1], ljj, ml, xmin, ymin, xmax, ymax, alpha);
+                    join_lines(set_pixel, +x1, +y1, +x2, +y2, +xp, +yp, dx0 || dx2, dy0 || dy2, w2[0], w2[1], dx00 || dx1, dy00 || dy1, w1[0], w1[1], ljj, ml, xmin, ymin, xmax, ymax, alpha);
                 }
             }
         }
