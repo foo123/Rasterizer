@@ -1486,12 +1486,12 @@ function dash_endpoint(points, len, pos, pt)
     pt.x = points[k+2];
     pt.y = {dx:+points[k+2]-points[k+0],dy:+points[k+3]-points[k+1],v:points[k+3],valueOf:toVal};
 }
-function dashed_polyline(points, ld, ldo, pw)
+function dashed_polyline(points, ld, ldo, pw, pmin)
 {
     var n = points.length,
         ls = (n >>> 1) - 1,
         len = new Array(ls),
-        i, j, idx, sw, sl, gl, slp, glp, min,
+        i, j, idx, sw, sl, gl, slp, glp,
         start, end, mid, left, right, prev,
         last, offset, pos, pos0,
         is_on, segments, dashes = [];
@@ -1500,21 +1500,20 @@ function dashed_polyline(points, ld, ldo, pw)
         sl = hypot(+points[i+2]-points[i], +points[i+3]-points[i+1]);
         sw += sl; len[j++] = sl;
     }
-    min = ld.reduce(function(min, sl) {return stdMath.min(min, sl);}, INF);
-    if (min >= 1) min = 1;
+    //if (pmin >= 1) pmin = 1;
     start = {x:points[0],y:points[1],i:0,l:0};
     end = {x:points[n-2],y:points[n-1],i:0,l:0};
     offset = ldo;
     while (offset > pw) offset -= pw;
     while (offset < 0)  offset += pw;
     idx = 0;
-    pos = -offset/min;
+    pos = -offset/pmin;
     pos0 = pos;
     slp = 0; glp = 0;
     for (;pos < sw;)
     {
-        sl = ld[idx]/min; // dash
-        gl = ld[idx+1]/min; // gap
+        sl = ld[idx]/pmin; // dash
+        gl = ld[idx+1]/pmin; // gap
         if ((0 < sl) && (0 < pos+sl))
         {
             dash_endpoint(points, len, clamp(pos, 0, sw), start);
@@ -2613,13 +2612,18 @@ function bezier_points(c, transform)
 }
 function stroke_path(set_pixel, path, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, sx, sy, xmin, ymin, xmax, ymax)
 {
-    var patternWidth = lineDash.reduce(function(w, ds) {return w+ds;}, 0);
+    var patternInfo = {width:0, min:INF};
+    lineDash.forEach(function(ds) {
+        patternInfo.width += ds;
+        patternInfo.min = stdMath.min(patternInfo.min, ds);
+    });
+    if (patternInfo.min >= 1) patternInfo.min = 1;
     for (var i=0,d=path._d,n=d.length,p; i<n; ++i)
     {
         p = d[i];
         if (p && (2 < p.length))
         {
-            var _p = lineDash.length ? dashed_polyline(p, lineDash, lineDashOffset, patternWidth) : [p];
+            var _p = lineDash.length ? dashed_polyline(p, lineDash, lineDashOffset, patternInfo.width, patternInfo.min) : [p];
             for (var j=0,m=_p.length; j<m; ++j)
             {
                 stroke_polyline(set_pixel, _p[j], lineWidth, 0 === j ? lineCap : 'butt', m === 1+j ? lineCap : 'butt', lineJoin, miterLimit, sx, sy, xmin, ymin, xmax, ymax);
