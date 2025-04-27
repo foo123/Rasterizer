@@ -628,6 +628,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
     };
     self.drawImage = function(imgData, sx, sy, sw, sh, dx, dy, dw, dh) {
         if (!imgData || !imgData.data) err('Invalid image data in drawImage');
+        // NOTE: current transform is not taken account of
         var W = width, H = height,
             w = imgData.width, h = imgData.height,
             idata = imgData.data,
@@ -667,8 +668,8 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         if (null == h) h = H;
         x1 = stdMath.max(0, stdMath.min(x, w-1, W-1));
         y1 = stdMath.max(0, stdMath.min(y, h-1, H-1));
-        x2 = stdMath.min(x1+w-1, w-1, W-1);
-        y2 = stdMath.min(y1+h-1, h-1, H-1);
+        x2 = stdMath.min(x1+w-1, W-1);
+        y2 = stdMath.min(y1+h-1, H-1);
         return {data: get_data(null, W, H, x1, y1, x2, y2), width: x2-x1+1, height: y2-y1+1};
     };
     self.putImageData = function(imgData, x, y) {
@@ -1342,17 +1343,34 @@ Matrix2D[PROTO] = {
         m.sy = 1/self.sy;
         return m;
     },
-    transform: function(x, y) {
-        if (1 === arguments.length)
+    transform: function(x, y, res) {
+        if ((2 === arguments.length) && y && y.length)
+        {
+            res = y;
+            y = x[1];
+            x = x[0];
+        }
+        else if (1 === arguments.length)
         {
             y = x[1];
             x = x[0];
         }
-        var self = this;
-        return [
-            self.m11*x + self.m12*y + self.m13,
-            self.m21*x + self.m22*y + self.m23
-        ];
+        var self = this,
+            tx = self.m11*x + self.m12*y + self.m13,
+            ty = self.m21*x + self.m22*y + self.m23;
+        if (res && res.length)
+        {
+            res[0] = tx;
+            res[1] = ty;
+        }
+        else
+        {
+            res = [
+                tx,
+                ty
+            ];
+        }
+        return res;
     }
 };
 Matrix2D.translate = function(tx, ty) {
@@ -1420,17 +1438,19 @@ Marker[PROTO] = {
 
 function handle(coords, transform)
 {
-    for (var i=0,n=coords.length; i<n; ++i)
+    var i, n, res;
+    for (i=0,n=coords.length; i<n; ++i)
     {
         if (is_nan(coords[i]) || !is_finite(coords[i]))
             return null;
     }
     if (transform)
     {
+        res = [0, 0];
         for (i=0; i<n; i+=2)
         {
-            var xy = transform.transform(coords[i], coords[i+1]);
-            coords[i] = xy[0]; coords[i+1] = xy[1];
+            transform.transform(coords[i], coords[i+1], res);
+            coords[i] = res[0]; coords[i+1] = res[1];
         }
     }
     return coords;
@@ -1449,16 +1469,16 @@ function add_arcto(p, x0, y0, x1, y1, x2, y2, r, transform)
     p.push.apply(p, arc2_points(x0, y0, x1, y1, x2, y2, r, transform));
 }
 function toVal() {return this.v;}
-function dash_endpoint(points, len, pos, pt)
+function dash_endpoint(points, lines, pos, pt, last_pt)
 {
-    for (var t,k,s=pt.l||0,j=pt.i||0,ls=len.length; j<ls; ++j)
+    for (var t,k,l=last_pt.l||0,j=last_pt.i||0,nl=lines.length; j<nl; ++j)
     {
-        if (0 < len[j] && s + len[j] >= pos)
+        if (0 < lines[j] && l + lines[j] >= pos)
         {
             k = j << 1;
             pt.i = j;
-            pt.l = s;
-            t = clamp((pos-s)/len[j], 0.0, 1.0);
+            pt.l = l;
+            t = clamp((pos-l)/lines[j], 0.0, 1.0);
             if (is_strictly_equal(t, 0.0))
             {
                 pt.x = points[k+0];
@@ -1477,47 +1497,46 @@ function dash_endpoint(points, len, pos, pt)
             pt.y = {dx:+points[k+2]-points[k+0],dy:+points[k+3]-points[k+1],v:pt.y,valueOf:toVal};
             return;
         }
-        s += len[j];
+        l += lines[j];
     }
-    j = ls - 1;
+    j = nl - 1;
     k = j << 1;
     pt.i = j;
-    pt.l = s;
+    pt.l = l;
     pt.x = points[k+2];
     pt.y = {dx:+points[k+2]-points[k+0],dy:+points[k+3]-points[k+1],v:points[k+3],valueOf:toVal};
 }
-function dashed_polyline(points, ld, ldo, pw, pmin)
+function dashed_polyline(points, ld, ldo, plen, pmin)
 {
-    var n = points.length,
-        ls = (n >>> 1) - 1,
-        len = new Array(ls),
-        i, j, idx, sw, sl, gl, slp, glp,
+    var num_coords = points.length,
+        num_lines = (num_coords >>> 1) - 1,
+        lines = new Array(num_lines),
+        i, j, l, index,
+        ld_length = ld.length, total_length = 0,
+        dash, gap, prev_dash, prev_gap,
         start, end, mid, left, right, prev,
-        last, offset, pos, pos0,
-        is_on, segments, dashes = [];
-    for (sw=0,j=0,i=0; i+2<n; i+=2)
+        last, offset, pos, segments, dashes = [];
+    for (j=0,i=0; j<num_lines; ++j,i+=2)
     {
-        sl = hypot(+points[i+2]-points[i], +points[i+3]-points[i+1]);
-        sw += sl; len[j++] = sl;
+        l = hypot(+points[i+2]-points[i], +points[i+3]-points[i+1]);
+        lines[j] = l; total_length += l;
     }
-    //if (pmin >= 1) pmin = 1;
     start = {x:points[0],y:points[1],i:0,l:0};
-    end = {x:points[n-2],y:points[n-1],i:0,l:0};
+    end = {x:points[num_coords-2],y:points[num_coords-1],i:0,l:0};
     offset = ldo;
-    while (offset > pw) offset -= pw;
-    while (offset < 0)  offset += pw;
-    idx = 0;
-    pos = -offset/pmin;
-    pos0 = pos;
-    slp = 0; glp = 0;
-    for (;pos < sw;)
+    if (offset >= plen) offset -= stdMath.floor(offset/plen)*plen;
+    if (offset < 0)     offset += stdMath.ceil(-offset/plen)*plen;
+    offset /= pmin;
+    index = 0;
+    pos = -offset+1;
+    for (;pos < total_length;)
     {
-        sl = ld[idx]/pmin; // dash
-        gl = ld[idx+1]/pmin; // gap
-        if ((0 < sl) && (0 < pos+sl))
+        dash = ld[index]/pmin;
+        gap = ld[index+1]/pmin;
+        if ((0 < dash) && (0 < pos+dash))
         {
-            dash_endpoint(points, len, clamp(pos, 0, sw), start);
-            dash_endpoint(points, len, clamp(pos+sl-1, 0, sw), end);
+            dash_endpoint(points, lines, clamp(pos, 0, total_length), start, end);
+            dash_endpoint(points, lines, clamp(pos+dash-1, 0, total_length), end, start);
             segments = null;
             if (start.i+1 < end.i)
             {
@@ -1530,7 +1549,7 @@ function dashed_polyline(points, ld, ldo, pw, pmin)
             }
             else if (start.i < end.i)
             {
-                segments = [start.x, start.y, points[(start.i << 1) + 2], points[(start.i << 1) + 3], end.x, end.y];
+                segments = [start.x, start.y, points[(end.i << 1) + 0], points[(end.i << 1) + 1], end.x, end.y];
             }
             else if (start.i === end.i)
             {
@@ -1542,28 +1561,27 @@ function dashed_polyline(points, ld, ldo, pw, pmin)
                 prev = last ? {x:last[last.length-2], y:last[last.length-1], i:last.i} : null;
                 mid = {x:points[(start.i << 1) + 0], y:points[(start.i << 1) + 1], i:start.i};
                 if (
-                    prev && (start.i-1 === prev.i) &&
+                    prev && (start.i-1 === prev.i) && (num_coords > ((start.i+1) << 1)) &&
                     //(4 === segments.length) && (4 === last.length) &&
-                    (hypot(+prev.x-mid.x, +prev.y-mid.y) < 1.8) &&
-                    (hypot(+mid.x-start.x, +mid.y-start.y) < 1.8)
+                    (hypot(+prev.x-mid.x, +prev.y-mid.y)+hypot(+mid.x-start.x, +mid.y-start.y)-0.5 < prev_gap)
                 )
                 {
-                    // add line join that may be missed
-                    left = {x:points[((start.i-1) << 1) + 0], y:points[((start.i-1) << 1) + 1], i:start.i-1};
-                    right = {x:points[(start.i << 1) + 2], y:points[(start.i << 1) + 3], i:start.i+1};
+                    // add line join that is missed
+                    left = {x:points[(prev.i << 1) + 0], y:points[(prev.i << 1) + 1], i:prev.i};
+                    right = {x:points[(start.i << 1) + 2], y:points[(start.i << 1) + 3], i:start.i};
                     dashes.push([mid.x, {dx:+mid.x-left.x,dy:+mid.y-left.y,v:mid.y,valueOf:toVal}, mid.x, mid.y, mid.x, {dx:+right.x-mid.x,dy:+right.y-mid.y,v:mid.y,valueOf:toVal}]);
                     dashes[dashes.length-1].i = start.i;
                     dashes[dashes.length-1].alpha = last.alpha;
                 }
                 segments.i = end.i;
-                segments.alpha = stdMath.max(0.49, 1 > ld[idx] ? ld[idx] : 1);
+                segments.alpha = stdMath.max(0.49, 1 > ld[index] ? ld[index] : 1);
                 dashes.push(segments);
             }
         }
-        if (0 < sl) pos += sl;
-        if (0 < gl) pos += gl;
-        slp = sl; glp = gl;
-        idx+=2; if (idx >= ld.length) {idx = 0; if (pos <= pos0) break;}
+        if (0 < dash) pos += dash;
+        if (0 < gap) pos += gap;
+        prev_dash = dash; prev_gap = gap;
+        index += 2; if (index >= ld_length) {index = 0;}
     }
     return dashes;
 }
@@ -2612,10 +2630,10 @@ function bezier_points(c, transform)
 }
 function stroke_path(set_pixel, path, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, sx, sy, xmin, ymin, xmax, ymax)
 {
-    var patternInfo = {width:0, min:INF};
-    lineDash.forEach(function(ds) {
-        patternInfo.width += ds;
-        patternInfo.min = stdMath.min(patternInfo.min, ds);
+    var patternInfo = {length:0, min:INF};
+    lineDash.forEach(function(segment) {
+        patternInfo.length += segment;
+        patternInfo.min = stdMath.min(patternInfo.min, segment);
     });
     if (patternInfo.min >= 1) patternInfo.min = 1;
     for (var i=0,d=path._d,n=d.length,p; i<n; ++i)
@@ -2623,10 +2641,10 @@ function stroke_path(set_pixel, path, lineWidth, lineDash, lineDashOffset, lineC
         p = d[i];
         if (p && (2 < p.length))
         {
-            var _p = lineDash.length ? dashed_polyline(p, lineDash, lineDashOffset, patternInfo.width, patternInfo.min) : [p];
+            var _p = lineDash.length ? dashed_polyline(p, lineDash, lineDashOffset, patternInfo.length, patternInfo.min) : [p];
             for (var j=0,m=_p.length; j<m; ++j)
             {
-                stroke_polyline(set_pixel, _p[j], lineWidth, 0 === j ? lineCap : 'butt', m === 1+j ? lineCap : 'butt', lineJoin, miterLimit, sx, sy, xmin, ymin, xmax, ymax);
+                if (0 < _p[j].length) stroke_polyline(set_pixel, _p[j], lineWidth, 0 === j ? lineCap : 'butt', m === 1+j ? lineCap : 'butt', lineJoin, miterLimit, sx, sy, xmin, ymin, xmax, ymax);
             }
         }
     }
