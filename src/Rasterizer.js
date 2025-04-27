@@ -584,7 +584,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         {
             for(x=x0,y=y0,i=0; y<=y1; i+=4,++x)
             {
-                if (x>x1) {x=x0; ++y;}
+                if (x>x1) {x=x0; ++y; if (y>y1) break;}
                 I = (y*W + x) << 2;
                 d[i  ] = D[I  ];
                 d[i+1] = D[I+1];
@@ -596,7 +596,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         {
             for(x=x0,y=y0,i=0; y<=y1; i+=4,++x)
             {
-                if (x>x1) {x=x0; ++y;}
+                if (x>x1) {x=x0; ++y; if (y>y1) break;}
                 c = get_rgba_from(x, y);
                 d[i  ] = clamp(c[0], 0, 255);
                 d[i+1] = clamp(c[1], 0, 255);
@@ -615,7 +615,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         X0 -= x0; Y0 -= y0;
         for(x=x0,y=y0; y<=y1; ++x)
         {
-            if (x>x1) {x=x0; ++y;}
+            if (x>x1) {x=x0; ++y; if (y>y1) break;}
             if ((y+Y0 >= H) || (x+X0 >= W)) continue;
             i = (y*w + x) << 2;
             /*I = ((y+Y0)*W + x+X0) << 2;
