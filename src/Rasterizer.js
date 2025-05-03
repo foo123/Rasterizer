@@ -628,12 +628,9 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
     };
     self.drawImage = function(imgData, sx, sy, sw, sh, dx, dy, dw, dh) {
         if (!imgData || !imgData.data) err('Invalid image data in drawImage');
-        var W = width, H = height,
-            w = imgData.width,
-            h = imgData.height,
-            data = imgData.data,
-            argslen = arguments.length,
-            T, pt, get_fill_at_backup = get_fill_at
+        var W = width, H = height, w = imgData.width, h = imgData.height,
+            data = imgData.data, argslen = arguments.length,
+            T, pt, get_fill_at_saved = get_fill_at
         ;
         if (!w || !h) err('Invalid image data in drawImage');
         sx = sx || 0;
@@ -664,7 +661,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         };
         self.fillRect(dx, dy, dw, dh);
         // restore
-        get_fill_at = get_fill_at_backup;
+        get_fill_at = get_fill_at_saved;
         /*
         // NOTE: current transform is not taken account of
         var W = width, H = height,
@@ -1553,7 +1550,7 @@ function dashed_polyline(points, ld, ldo, plen, pmin)
         i, j, l, index,
         ld_length = ld.length, total_length = 0,
         dash, gap, prev_dash, prev_gap,
-        start, end, mid, left, right, prev,
+        start, end, mid, left, right, prev, d1, d2, o,
         last, offset, pos, segments, dashes = [];
     for (j=0,i=0; j<num_lines; ++j,i+=2)
     {
@@ -1567,7 +1564,7 @@ function dashed_polyline(points, ld, ldo, plen, pmin)
     if (offset < 0)     offset += stdMath.ceil(-offset/plen)*plen;
     offset /= pmin;
     index = 0;
-    pos = -offset+1;
+    pos = -offset;
     for (;pos < total_length;)
     {
         dash = ld[index]/pmin;
@@ -1599,18 +1596,21 @@ function dashed_polyline(points, ld, ldo, plen, pmin)
                 last = dashes.length ? dashes[dashes.length-1] : null;
                 prev = last ? {x:last[last.length-2], y:last[last.length-1], i:last.i} : null;
                 mid = {x:points[(start.i << 1) + 0], y:points[(start.i << 1) + 1], i:start.i};
-                if (
-                    prev && (start.i-1 === prev.i) && (num_coords > ((start.i+1) << 1)) &&
-                    //(4 === segments.length) && (4 === last.length) &&
-                    (hypot(+prev.x-mid.x, +prev.y-mid.y)+hypot(+mid.x-start.x, +mid.y-start.y)-0.5 < prev_gap)
-                )
+                if (prev && (start.i-1 === prev.i))
                 {
-                    // add line join that is missed
-                    left = {x:points[(prev.i << 1) + 0], y:points[(prev.i << 1) + 1], i:prev.i};
-                    right = {x:points[(start.i << 1) + 2], y:points[(start.i << 1) + 3], i:start.i};
-                    dashes.push([mid.x, {dx:+mid.x-left.x,dy:+mid.y-left.y,v:mid.y,valueOf:toVal}, mid.x, mid.y, mid.x, {dx:+right.x-mid.x,dy:+right.y-mid.y,v:mid.y,valueOf:toVal}]);
-                    dashes[dashes.length-1].i = start.i;
-                    dashes[dashes.length-1].alpha = last.alpha;
+                    d1 = hypot(+prev.x-mid.x, +prev.y-mid.y);
+                    d2 = hypot(+mid.x-start.x, +mid.y-start.y);
+                    o = offset;
+                    //console.log(d1, d2, d1+d2, dash, gap, o);
+                    if (d1+d2+o > prev_dash+prev_gap)
+                    {
+                        // add line join that is missed
+                        left = {x:points[(prev.i << 1) + 0], y:points[(prev.i << 1) + 1], i:prev.i};
+                        right = {x:points[(start.i << 1) + 2], y:points[(start.i << 1) + 3], i:start.i};
+                        dashes.push([mid.x, {dx:+mid.x-left.x,dy:+mid.y-left.y,v:mid.y,valueOf:toVal}, mid.x, mid.y, mid.x, {dx:+right.x-mid.x,dy:+right.y-mid.y,v:mid.y,valueOf:toVal}]);
+                        dashes[dashes.length-1].i = start.i;
+                        dashes[dashes.length-1].alpha = last.alpha;
+                    }
                 }
                 segments.i = end.i;
                 segments.alpha = stdMath.max(0.49, 1 > ld[index] ? ld[index] : 1);
