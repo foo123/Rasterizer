@@ -462,7 +462,7 @@ function drawBeziers(c, angle)
     ctx.stroke();
     ctx2.putImageData(imData, 0, 0);
 }
-function drawRect()
+function drawRect(ld)
 {
     const canvas1 = document.createElement('canvas');
     const canvas2 = document.createElement('canvas');
@@ -485,6 +485,8 @@ function drawRect()
     // Rotated Rounded rectangle with 2 different radii
     ctx1.strokeStyle = "#f00";
     ctx1.lineWidth = 20;
+    ctx1.lineDashOffset = ld && ld.length ? ld[0] : 0;
+    ctx1.setLineDash(ld && ld.length ? ld[1] : []);
     ctx1.beginPath();
     ctx1.rect(40, 40, 90, 100);
     ctx1.stroke();
@@ -494,13 +496,15 @@ function drawRect()
     const ctx = r.getContext("2d");
     ctx.strokeStyle = [0xff,0,0];
     ctx.lineWidth = 20;
+    ctx.lineDashOffset = ld && ld.length ? ld[0] : 0;
+    ctx.setLineDash(ld && ld.length ? ld[1] : []);
     ctx.beginPath();
     ctx.rect(40, 40, 90, 100);
     ctx.stroke();
 
     ctx2.putImageData(imData, 0, 0);
 }
-function drawRoundRect()
+function drawRoundRect(ld)
 {
     const canvas1 = document.createElement('canvas');
     const canvas2 = document.createElement('canvas');
@@ -522,6 +526,8 @@ function drawRoundRect()
 
     // Rotated Rounded rectangle with 2 different radii
     ctx1.strokeStyle = "#f00";
+    ctx1.lineDashOffset = ld && ld.length ? ld[0] : 0;
+    ctx1.setLineDash(ld && ld.length ? ld[1] : []);
     ctx1.translate(50, 55);
     ctx1.rotate(-Math.PI/6);
     ctx1.translate(-50, -55);
@@ -533,6 +539,8 @@ function drawRoundRect()
     const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
     const ctx = r.getContext("2d");
     ctx.strokeStyle = [0xff,0,0];
+    ctx.lineDashOffset = ld && ld.length ? ld[0] : 0;
+    ctx.setLineDash(ld && ld.length ? ld[1] : []);
     ctx.translate(50, 55);
     ctx.rotate(-Math.PI/6);
     ctx.translate(-50, -55);
@@ -921,22 +929,31 @@ drawPolyline(20, 10, 40, 60, 10, 70, 20, [], 'butt', 'round');
 drawPolyline(20, 70, 40, 10, 70, 60, 20, [], 'butt', 'round');
 drawPolyline(20, 10, 40, 70, 70, 20, 20, [], 'butt', 'round');
 drawPolyline(60, 20, 20, 20, 20, 60, 20, [0,[1,1]], 'butt', 'bevel');
-//drawPolyline(60, 20, 20, 20, 20, 60, 20, [0,[0.1,0.1]], 'butt', 'bevel');
+drawPolyline(60, 20, 20, 20, 20, 60, 20, [0,[0.1,0.2]], 'butt', 'bevel');
+drawPolyline(60, 20, 20, 20, 20, 60, 20, [0,[0.5,1]], 'butt', 'bevel');
 drawPolyline(10, 10, 60, 10, 60, 60, 20, [0,[10,5]], 'butt', 'bevel');
 drawPolyline(20, 10, 20, 60, 60, 60, 20, [0,[10,5]], 'butt', 'bevel');
 drawPolyline(60, 10, 60, 60, 10, 60, 20, [0,[10,5]], 'butt', 'bevel');
 drawPolyline(70, 70, 40, 60, 20, 10, 20, [0,[10,5]], 'butt', 'bevel');
+drawPolyline(70, 70, 40, 60, 20, 10, 20, [0,[1,1]], 'butt', 'bevel');
+drawPolyline(70, 70, 40, 60, 20, 10, 20, [3,[1,1]], 'butt', 'bevel');
 drawPolyline(20, 10, 40, 60, 70, 70, 20, [0,[10,5]], 'butt', 'bevel');
+drawPolyline(20, 10, 40, 60, 70, 70, 20, [0,[1,1]], 'butt', 'bevel');
+drawPolyline(20, 10, 40, 60, 70, 70, 20, [3,[1,1]], 'butt', 'bevel');
 drawPolyline(20, 10, 40, 60, 10, 70, 20, [0,[10,5]], 'butt', 'bevel');
 drawPolyline(20, 70, 40, 10, 70, 60, 20, [3,[10,5]], 'butt', 'bevel');
+drawPolyline(20, 70, 40, 10, 70, 60, 20, [0,[1,1]], 'butt', 'bevel');
+drawPolyline(20, 70, 40, 10, 70, 60, 20, [1,[1,1]], 'butt', 'bevel');
+drawPolyline(20, 70, 40, 10, 70, 60, 20, [2,[1,1]], 'butt', 'bevel');
+drawPolyline(20, 70, 40, 10, 70, 60, 20, [3,[1,1]], 'butt', 'bevel');
 drawPolyline(20, 10, 40, 70, 70, 20, 20, [3,[10,5]], 'butt', 'bevel');
 drawPolyline(70, 20, 40, 70, 20, 10, 20, [3,[10,5]], 'butt', 'bevel');
 drawGradientCircles();
 drawArcTo();
 drawArcs(6, 4, -Math.PI/4);
 drawBeziers([10, 10, 200, 100, 10, 100, 70, 10], -Math.PI/4);
-drawRect();
-drawRoundRect();
+drawRect([3,[5,5]]);
+drawRoundRect([3,[5,5]]);
 clearRect();
 drawGradientArc(50, 50, 20, 40, 30*Math.PI/180, 1, 3*Math.PI/2, false, 2, [], 'butt', 'bevel');
 drawGradientArc(50, 50, 20, 40, 30*Math.PI/180, 1, Math.PI/2, true, 2, [], 'butt', 'bevel');

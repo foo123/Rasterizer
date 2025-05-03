@@ -628,6 +628,44 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
     };
     self.drawImage = function(imgData, sx, sy, sw, sh, dx, dy, dw, dh) {
         if (!imgData || !imgData.data) err('Invalid image data in drawImage');
+        var W = width, H = height,
+            w = imgData.width,
+            h = imgData.height,
+            data = imgData.data,
+            argslen = arguments.length,
+            T, pt, get_fill_at_backup = get_fill_at
+        ;
+        if (!w || !h) err('Invalid image data in drawImage');
+        sx = sx || 0;
+        sy = sy || 0;
+        sw = w;
+        sh = h;
+        if (3 === argslen || 5 === argslen)
+        {
+            dx = sx; dy = sy;
+            dw = sw; dh = sh;
+        }
+        // fill rect with image taking account of active transform
+        T = transform.inv(); pt = [0, 0];
+        get_fill_at = function(xx, yy) {
+            T.transform(xx, yy, pt);
+            var index, x = stdMath.round((pt[0]-dx)*sw/dw+sx), y = stdMath.round((pt[1]-dy)*sh/dh+sy);
+            if (0 <= x && x < w && 0 <= y && y < h)
+            {
+                index = (x + w*y) << 2;
+                return [
+                    data[index  ],
+                    data[index+1],
+                    data[index+2],
+                    data[index+3]/255
+                ];
+            }
+            return BLANK;
+        };
+        self.fillRect(dx, dy, dw, dh);
+        // restore
+        get_fill_at = get_fill_at_backup;
+        /*
         // NOTE: current transform is not taken account of
         var W = width, H = height,
             w = imgData.width, h = imgData.height,
@@ -659,6 +697,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
             else
                 set_data(null, W, H, resize(get_data(idata, w, h, sx, sy, sx+sw-1, sy+sh-1), sw, sh, dw, dh), dw, dh, 0, 0, dw-1, dh-1, dx, dy);
         }
+        */
     };
     self.getImageData = function(x, y, w, h) {
         var W = width, H = height, x1, y1, x2, y2;
@@ -666,8 +705,8 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         if (null == y) y = 0;
         if (null == w) w = W;
         if (null == h) h = H;
-        x1 = stdMath.max(0, stdMath.min(x, w-1, W-1));
-        y1 = stdMath.max(0, stdMath.min(y, h-1, H-1));
+        x1 = stdMath.max(0, stdMath.min(x, W-1));
+        y1 = stdMath.max(0, stdMath.min(y, H-1));
         x2 = stdMath.min(x1+w-1, W-1);
         y2 = stdMath.min(y1+h-1, H-1);
         return {data: get_data(null, W, H, x1, y1, x2, y2), width: x2-x1+1, height: y2-y1+1};

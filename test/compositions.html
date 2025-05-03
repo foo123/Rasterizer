@@ -159,7 +159,7 @@ function globalComposition(op)
     ctx.fillRect(50, 50, 100, 100);
     ctx2.putImageData(imData, 0, 0);
 }
-function drawImage(src)
+function drawImage(src, rotation)
 {
     const canvas1 = document.createElement('canvas');
     const canvas2 = document.createElement('canvas');
@@ -180,6 +180,7 @@ function drawImage(src)
     img.onload = function() {
         const ctx1 = canvas1.getContext("2d");
         const ctx2 = canvas2.getContext("2d");
+        if (rotation) {/*ctx1.translate(-img.width/2, -img.height/2);*/ctx1.rotate(rotation);/*ctx1.translate(img.width/2, img.height/2);*/}
         ctx1.drawImage(img, 0, 0, img.width, img.height, 15, 10, img.width/2, img.height/2)
 
         const imData = ctx2.getImageData(0, 0, w, h);
@@ -189,6 +190,7 @@ function drawImage(src)
         c.width = img.width;
         c.height = img.height;
         c.getContext('2d').drawImage(img, 0, 0);
+        if (rotation) {/*ctx.translate(-img.width/2, -img.height/2);*/ctx.rotate(rotation);/*ctx.translate(img.width/2, img.height/2);*/}
         ctx.drawImage(c.getContext('2d').getImageData(0, 0, img.width, img.height), 0, 0, img.width, img.height, 15, 10, img.width/2, img.height/2)
         ctx2.putImageData(imData, 0, 0);
     };
@@ -214,6 +216,7 @@ globalComposition('soft-light');
 globalComposition('difference');
 globalComposition('exclusion');
 drawImage('./cat.jpg');
+drawImage('./cat.jpg', Math.PI/8);
 })();
 </script>
 </body></html>
