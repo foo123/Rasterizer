@@ -209,7 +209,42 @@ function drawImage(src, rotation, op)
     };
     img.src = src;
 }
+function inStroke()
+{
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
 
+    const ctx1 = canvas1.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
+
+    ctx1.lineWidth = 5;
+    ctx1.scale(2,2);
+    ctx1.moveTo(10, 10);
+    ctx1.lineTo(50, 10);
+    ctx1.stroke();
+
+    const imData = ctx2.getImageData(0, 0, w, h);
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
+    const ctx = r.getContext("2d");
+    ctx.lineWidth = 5;
+    ctx.scale(2,2);
+    ctx.moveTo(10, 10);
+    ctx.lineTo(50, 10);
+    ctx.stroke();
+    ctx2.putImageData(imData, 0, 0);
+    test1.appendChild(text('Point In Stroke '+(ctx1.isPointInStroke(20, 15))+''));
+    test2.appendChild(text('Point In Stroke '+(ctx.isPointInStroke(20, 15))+''));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+}
 globalAlpha();
 globalComposition('source-over');
 globalComposition('destination-over');
@@ -227,6 +262,7 @@ globalComposition('difference');
 globalComposition('exclusion');
 drawImage('./cat.jpg');
 drawImage('./cat.jpg', Math.PI/8, 'overlay');
+inStroke();
 })();
 </script>
 </body></html>

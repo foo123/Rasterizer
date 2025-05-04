@@ -560,7 +560,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
             x = path;
             path = currentPath;
         }
-        return point_in_stroke(x || 0, y || 0, path || currentPath);
+        return point_in_stroke(x || 0, y || 0, path || currentPath, lineWidth);
     };
     self.isPointInPath = function(path, x, y, fillRule) {
         if (!(path instanceof Path2D))
@@ -1505,11 +1505,11 @@ function add_arcto(p, x0, y0, x1, y1, x2, y2, r, transform)
     p.push.apply(p, arc2_points(x0, y0, x1, y1, x2, y2, r, transform));
 }
 function toVal() {return this.v;}
-function dash_endpoint(points, lines, pos, pt, last_pt)
+function dash_endpoint(points, lines, pos, pt, last_pt, total_length)
 {
     for (var t,k,l=last_pt.l||0,j=last_pt.i||0,nl=lines.length; j<nl; ++j)
     {
-        if (0 < lines[j] && l + lines[j] >= pos)
+        if ((0 < lines[j]) && (l + lines[j] > pos) && (pos+1 < total_length))
         {
             k = j << 1;
             pt.i = j;
@@ -1538,7 +1538,7 @@ function dash_endpoint(points, lines, pos, pt, last_pt)
     j = nl - 1;
     k = j << 1;
     pt.i = j;
-    pt.l = l;
+    pt.l = total_length;
     pt.x = points[k+2];
     pt.y = {dx:+points[k+2]-points[k+0],dy:+points[k+3]-points[k+1],v:points[k+3],valueOf:toVal};
 }
@@ -1550,7 +1550,7 @@ function dashed_polyline(points, ld, ldo, plen, pmin)
         i, j, l, index,
         ld_length = ld.length, total_length = 0,
         dash, gap, prev_dash, prev_gap,
-        start, end, mid, left, right, prev, d1, d2, o,
+        start, end, mid, left, right, prev, d1, d2,
         last, offset, pos, segments, dashes = [];
     for (j=0,i=0; j<num_lines; ++j,i+=2)
     {
@@ -1571,8 +1571,8 @@ function dashed_polyline(points, ld, ldo, plen, pmin)
         gap = ld[index+1]/pmin;
         if ((0 < dash) && (0 < pos+dash))
         {
-            dash_endpoint(points, lines, clamp(pos, 0, total_length), start, end);
-            dash_endpoint(points, lines, clamp(pos+dash-1, 0, total_length), end, start);
+            dash_endpoint(points, lines, clamp(pos, 0, total_length-1), start, end, total_length);
+            dash_endpoint(points, lines, clamp(pos+dash-1, 0, total_length-1), end, start, total_length);
             segments = null;
             if (start.i+1 < end.i)
             {
@@ -1595,14 +1595,12 @@ function dashed_polyline(points, ld, ldo, plen, pmin)
             {
                 last = dashes.length ? dashes[dashes.length-1] : null;
                 prev = last ? {x:last[last.length-2], y:last[last.length-1], i:last.i} : null;
-                mid = {x:points[(start.i << 1) + 0], y:points[(start.i << 1) + 1], i:start.i};
                 if (prev && (start.i-1 === prev.i))
                 {
+                    mid = {x:points[(start.i << 1) + 0], y:points[(start.i << 1) + 1], i:start.i};
                     d1 = hypot(+prev.x-mid.x, +prev.y-mid.y);
                     d2 = hypot(+mid.x-start.x, +mid.y-start.y);
-                    o = offset;
-                    //console.log(d1, d2, d1+d2, dash, gap, o);
-                    if (d1+d2+o > prev_dash+prev_gap)
+                    if (d1+d2+offset > prev_dash+prev_gap)
                     {
                         // add line join that is missed
                         left = {x:points[(prev.i << 1) + 0], y:points[(prev.i << 1) + 1], i:prev.i};
@@ -1613,7 +1611,7 @@ function dashed_polyline(points, ld, ldo, plen, pmin)
                     }
                 }
                 segments.i = end.i;
-                segments.alpha = stdMath.max(0.49, 1 > ld[index] ? ld[index] : 1);
+                segments.alpha = stdMath.max(0.7, 1 > ld[index] ? ld[index] : 1);
                 dashes.push(segments);
             }
         }
@@ -2810,11 +2808,14 @@ function fill_path(set_pixel, path, rule, xmin, ymin, xmax, ymax)
         }
     }
 }
-function point_in_stroke(x, y, path)
+function point_in_stroke(x, y, path, lw)
 {
     var i, j, p, m,
         d = path._d, n = d.length,
-        x1, y1, x2, y2;
+        x1, y1, x2, y2,
+        sx = stdMath.abs(path.transform.sx),
+        sy = stdMath.abs(path.transform.sy);
+    if (null == lw) lw = 1;
     for (i=0; i<n; ++i)
     {
         p = d[i];
@@ -2827,7 +2828,7 @@ function point_in_stroke(x, y, path)
                 y1 = p[j+1];
                 x2 = +p[j+2];
                 y2 = p[j+3];
-                if (is_almost_equal((y2 - y1)*(x - x1), (y - y1)*(x2 - x1), 1e-4))
+                if (2*point_line_segment_distance(x, y, x1, y1, x2, y2, sx, sy) <= lw)
                 {
                     return true;
                 }
@@ -3321,6 +3322,16 @@ function point_line_distance(x, y, x1, y1, x2, y2)
     ;
     if (is_strictly_equal(d, 0)) return hypot(x - x1, y - y1);
     return stdMath.abs(dx*(y1 - y) - dy*(x1 - x)) / d;
+}
+function point_line_segment_distance(x, y, x1, y1, x2, y2, sx, sy)
+{
+    var t = 0, dx = (x2 - x1)/sx, dy = (y2 - y1)/sy,
+        dx1 = (x - x1)/sx, dy1 = (y - y1)/sy,
+        d = hypot(dx, dy)
+    ;
+    if (is_strictly_equal(d, 0)) return hypot(dx1, dy1);
+    t = (dx1*dx + dy1*dy) / d;
+    return 0.0 <= t && t <= 1.0 ? hypot(dx1 - t*dx, dy1 - t*dy) : INF;
 }
 function point_line_project(x, y, x1, y1, x2, y2)
 {
