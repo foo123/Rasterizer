@@ -226,8 +226,9 @@ function inStroke()
     const ctx2 = canvas2.getContext("2d");
 
     ctx1.lineWidth = 5;
-    ctx1.scale(2,2);
-    ctx1.moveTo(10, 10);
+    ctx1.setLineDash([5,10]);
+    //ctx1.scale(2,2);
+    ctx1.moveTo(-10, 10);
     ctx1.lineTo(50, 10);
     ctx1.stroke();
 
@@ -235,13 +236,14 @@ function inStroke()
     const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
     const ctx = r.getContext("2d");
     ctx.lineWidth = 5;
-    ctx.scale(2,2);
-    ctx.moveTo(10, 10);
+    ctx.setLineDash([5,10]);
+    //ctx.scale(2,2); // scale with linedash is incorrect
+    ctx.moveTo(-10, 10);
     ctx.lineTo(50, 10);
     ctx.stroke();
     ctx2.putImageData(imData, 0, 0);
-    test1.appendChild(text('Point In Stroke '+(ctx1.isPointInStroke(20, 15))+''));
-    test2.appendChild(text('Point In Stroke '+(ctx.isPointInStroke(20, 15))+''));
+    test1.appendChild(text('Point In Stroke '+(ctx1.isPointInStroke(-6, 11))+''));
+    test2.appendChild(text('Point In Stroke '+(ctx.isPointInStroke(-6, 11))+''));
     test1.appendChild(canvas1);
     test2.appendChild(canvas2);
 }

@@ -560,7 +560,22 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
             x = path;
             path = currentPath;
         }
-        return point_in_stroke(x || 0, y || 0, path || currentPath, lineWidth);
+        x = x || 0;
+        y = y || 0;
+        path = path || currentPath;
+        //return point_in_stroke(x, y, path, lineWidth);
+        // stroke and then check if in stroke
+        var pt = String(x)+','+String(y),
+            stroke = {},
+            check_in_stroke = function(x, y, i) {
+                var idx = String(x)+','+String(y),
+                    j = stroke[idx] || 0,
+                    m = clip_canvas ? (clip_canvas[idx] || 0) : 1;
+                i *= m;
+                if (i > j) stroke[idx] = i;
+            };
+        stroke_path(check_in_stroke, path, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, path.transform.sx, path.transform.sy, null, null, null, null);
+        return null != stroke[pt];
     };
     self.isPointInPath = function(path, x, y, fillRule) {
         if (!(path instanceof Path2D))
@@ -1736,6 +1751,7 @@ function clip(x1, y1, x2, y2, xmin, ymin, xmax, ymax)
 {
     // clip points to viewport
     // https://en.wikipedia.org/wiki/Liang%E2%80%93Barsky_algorithm
+    if (null == xmin || !isFinite(xmin)) return;
     var p1 = -(x2 - x1),
         p2 = -p1,
         p3 = -(y2 - y1),
@@ -2140,7 +2156,7 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, lw, xmin, ymin, xmax, ymax, 
 
     if (!alpha) return alpha;
     // if line is outside viewport return
-    if (xM < xmin || xm > xmax || yM < ymin || ym > ymax) return alpha;
+    if (null != xmin && (xM < xmin || xm > xmax || yM < ymin || ym > ymax)) return alpha;
 
     if (null == dx)
     {
@@ -2149,7 +2165,7 @@ function wu_line(set_pixel, xs, ys, xe, ye, dx, dy, lw, xmin, ymin, xmax, ymax, 
     }
 
     // clip it to viewport if needed
-    if (xm < xmin || xM > xmax || ym < ymin || yM > ymax)
+    if (null != xmin && (xm < xmin || xM > xmax || ym < ymin || yM > ymax))
     {
         var clipped = clip(xs, ys, xe, ye, xmin, ymin, xmax, ymax);
         if (!clipped) return alpha;
