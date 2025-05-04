@@ -650,9 +650,13 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         if (!w || !h) err('Invalid image data in drawImage');
         sx = sx || 0;
         sy = sy || 0;
-        sw = w;
-        sh = h;
-        if (3 === argslen || 5 === argslen)
+        if (3 === argslen)
+        {
+            sw = w; sh = h;
+            dx = sx; dy = sy;
+            dw = sw; dh = sh;
+        }
+        else if (5 === argslen)
         {
             dx = sx; dy = sy;
             dw = sw; dh = sh;
@@ -2849,6 +2853,7 @@ function fill_path(set_pixel, path, rule, xmin, ymin, xmax, ymax)
                 y1 = p[j+1];
                 x2 = +p[j+2];
                 y2 = p[j+3];
+                //if (is_almost_equal((y2 - y1)*(x - x1), (y - y1)*(x2 - x1), 1e-4))
                 if (2*point_line_segment_distance(x, y, x1, y1, x2, y2, sx, sy) <= lw)
                 {
                     return true;
@@ -3344,7 +3349,7 @@ function point_line_distance(x, y, x1, y1, x2, y2)
     if (is_strictly_equal(d, 0)) return hypot(x - x1, y - y1);
     return stdMath.abs(dx*(y1 - y) - dy*(x1 - x)) / d;
 }
-function point_line_segment_distance(x, y, x1, y1, x2, y2, sx, sy)
+/*function point_line_segment_distance(x, y, x1, y1, x2, y2, sx, sy)
 {
     var t = 0, dx = (x2 - x1)/sx, dy = (y2 - y1)/sy,
         dx1 = (x - x1)/sx, dy1 = (y - y1)/sy,
@@ -3353,7 +3358,7 @@ function point_line_segment_distance(x, y, x1, y1, x2, y2, sx, sy)
     if (is_strictly_equal(d, 0)) return hypot(dx1, dy1);
     t = (dx1*dx + dy1*dy) / d;
     return 0.0 <= t && t <= 1.0 ? hypot(dx1 - t*dx, dy1 - t*dy) : INF;
-}
+}*/
 function point_line_project(x, y, x1, y1, x2, y2)
 {
     var dx = x2 - x1,
