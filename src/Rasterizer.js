@@ -564,18 +564,17 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         y = y || 0;
         path = path || currentPath;
         //return point_in_stroke(x, y, path, lineWidth);
-        // stroke and then check if in stroke
-        var pt = String(x)+','+String(y),
-            stroke = {},
-            check_in_stroke = function(x, y, i) {
-                var idx = String(x)+','+String(y),
-                    j = stroke[idx] || 0,
-                    m = clip_canvas ? (clip_canvas[idx] || 0) : 1;
-                i *= m;
-                if (i > j) stroke[idx] = i;
-            };
-        stroke_path(check_in_stroke, path, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, path.transform.sx, path.transform.sy, null, null, null, null);
-        return null != stroke[pt];
+        // stroke and check if in stroke
+        x = stdMath.round(x); y = stdMath.round(y);
+        var pt = String(x)+','+String(y), point_in_stroke = false;
+        stroke_path(function(px, py, i) {
+            if ((x === px) && (y === py))
+            {
+                i *= clip_canvas ? (clip_canvas[pt] || 0) : 1;
+                if (i > 0) point_in_stroke = true;
+            }
+        }, path, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, path.transform.sx, path.transform.sy, null, null, null, null);
+        return point_in_stroke;
     };
     self.isPointInPath = function(path, x, y, fillRule) {
         if (!(path instanceof Path2D))
@@ -645,30 +644,32 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         if (!imgData || !imgData.data) err('Invalid image data in drawImage');
         var W = width, H = height, w = imgData.width, h = imgData.height,
             data = imgData.data, argslen = arguments.length,
-            T, pt, get_fill_at_saved = get_fill_at
+            T, P, get_fill_at_saved = get_fill_at
         ;
         if (!w || !h) err('Invalid image data in drawImage');
         sx = sx || 0;
         sy = sy || 0;
-        if (3 === argslen)
+        if (4 > argslen)
         {
-            sw = w; sh = h;
-            dx = sx; dy = sy;
-            dw = sw; dh = sh;
+            sw = w;
+            sh = h;
         }
-        else if (5 === argslen)
+        if (6 > argslen)
         {
-            dx = sx; dy = sy;
-            dw = sw; dh = sh;
+            dx = sx;
+            dy = sy;
+            dw = sw;
+            dh = sh;
         }
         // fill rect with image taking account of active transform
-        T = transform.inv(); pt = [0, 0];
-        get_fill_at = function(xx, yy) {
-            T.transform(xx, yy, pt);
-            var index, x = stdMath.round((pt[0]-dx)*sw/dw+sx), y = stdMath.round((pt[1]-dy)*sh/dh+sy);
+        T = transform.inv(); P = [0, 0];
+        get_fill_at = function(x, y) {
+            T.transform(x, y, P);
+            x = stdMath.round(sx + (P[0]-dx)*sw/dw);
+            y = stdMath.round(sy + (P[1]-dy)*sh/dh);
             if (0 <= x && x < w && 0 <= y && y < h)
             {
-                index = (x + w*y) << 2;
+                var index = (x + w*y) << 2;
                 return [
                     data[index  ],
                     data[index+1],
@@ -725,7 +726,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         y1 = stdMath.max(0, stdMath.min(y, H-1));
         x2 = stdMath.min(x1+w-1, W-1);
         y2 = stdMath.min(y1+h-1, H-1);
-        return {data: get_data(null, W, H, x1, y1, x2, y2), width: x2-x1+1, height: y2-y1+1};
+        return {data: get_data(null, W, H, x1, y1, x2, y2), width: x2-x1+1, height: y2-y1+1/*, colorSpace: undefined*/};
     };
     self.putImageData = function(imgData, x, y) {
         if (!imgData || !imgData.data) err('Invalid image data in putImageData');
@@ -788,7 +789,8 @@ RenderingContext2D[PROTO] = {
         return {
             data: new ImArray((width*height) << 2),
             width: width,
-            height: height
+            height: height/*,
+            colorSpace: undefined*/
         };
     },
     getImageData: null,
@@ -2835,6 +2837,7 @@ function fill_path(set_pixel, path, rule, xmin, ymin, xmax, ymax)
 }
 /*function point_in_stroke(x, y, path, lw)
 {
+    // NOTE: lineDashes, lineJoins, etc are not taken account of
     var i, j, p, m,
         d = path._d, n = d.length,
         x1, y1, x2, y2,
