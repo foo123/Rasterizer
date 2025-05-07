@@ -836,7 +836,7 @@ RenderingContext2D.CompositionMode['hardlight'] = RenderingContext2D.Composition
 RenderingContext2D.CompositionMode['softlight'] = RenderingContext2D.CompositionMode['soft-light'];
 
 RenderingContext2D.Interpolation = {
-'bilinear': function(im, w, h, nw, nh) {
+/*'bilinear': function(im, w, h, nw, nh) {
     // http://pixinsight.com/doc/docs/InterpolationAlgorithms/InterpolationAlgorithms.html
     // http://tech-algorithm.com/articles/bilinear-image-scaling/
     var size = (nw*nh) << 2,
@@ -876,7 +876,7 @@ RenderingContext2D.Interpolation = {
         interpolated[index+3] = clamp(stdMath.round(A*a +  B*b + C*c  +  D*d), 0, 255);
     }
     return interpolated;
-}
+}*/
 };
 function Path2D(path, transform)
 {

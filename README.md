@@ -2,9 +2,7 @@
 
 Rasterize, stroke and fill lines, rectangles, curves and paths. Even without canvas.
 
-**version: 1.0.0 in progress** (33 kB minified)
-
-`lineDash`/`lineDashOffset` implementation is in progress
+**version: 1.0.0** (36 kB minified)
 
 **What is not supported:**
 
