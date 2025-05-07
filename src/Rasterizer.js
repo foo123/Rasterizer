@@ -644,7 +644,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         if (!imgData || !imgData.data) err('Invalid image data in drawImage');
         var W = width, H = height, w = imgData.width, h = imgData.height,
             data = imgData.data, argslen = arguments.length,
-            T, P, get_fill_at_saved = get_fill_at
+            T, P, get_fill_at_saved = get_fill_at, w4 = w << 2
         ;
         if (!w || !h) err('Invalid image data in drawImage');
         sx = sx || 0;
@@ -665,16 +665,34 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         T = transform.inv(); P = [0, 0];
         get_fill_at = function(x, y) {
             T.transform(x, y, P);
-            x = stdMath.round(sx + (P[0]-dx)*sw/dw);
-            y = stdMath.round(sy + (P[1]-dy)*sh/dh);
+            x = sx + (P[0]-dx)*sw/dw;
+            y = sy + (P[1]-dy)*sh/dh;
+            // nearest interpolation
+            //x = stdMath.round(x);
+            //y = stdMath.round(y);
+            // bilinear interpolation
+            var deltax = x-stdMath.floor(x),
+                deltay = y-stdMath.floor(y),
+                a = (1-deltax)*(1-deltay),
+                b = deltax*(1-deltay),
+                c = deltay*(1-deltax),
+                d = deltax*deltay;
+            x = stdMath.floor(x);
+            y = stdMath.floor(y);
             if (0 <= x && x < w && 0 <= y && y < h)
             {
                 var index = (x + w*y) << 2;
+                /*return [
+                data[index  ],
+                data[index+1],
+                data[index+2],
+                data[index+3]/255
+                ];*/
                 return [
-                    data[index  ],
-                    data[index+1],
-                    data[index+2],
-                    data[index+3]/255
+                clamp(stdMath.round(data[index  ]*a +  (x+1<w?data[index+4]:0)*b + (y+1<h?data[index+w4]:0)*c  +  (x+1<w&&y+1<h?data[index+4+w4]:0)*d), 0, 255),
+                clamp(stdMath.round(data[index+1]*a +  (x+1<w?data[index+5]:0)*b + (y+1<h?data[index+w4+1]:0)*c  +  (x+1<w&&y+1<h?data[index+5+w4]:0)*d), 0, 255),
+                clamp(stdMath.round(data[index+2]*a +  (x+1<w?data[index+6]:0)*b + (y+1<h?data[index+w4+2]:0)*c  +  (x+1<w&&y+1<h?data[index+6+w4]:0)*d), 0, 255),
+                clamp(stdMath.round(data[index+3]*a +  (x+1<w?data[index+7]:0)*b + (y+1<h?data[index+w4+3]:0)*c  +  (x+1<w&&y+1<h?data[index+7+w4]:0)*d), 0, 255)/255
                 ];
             }
             return BLANK;
