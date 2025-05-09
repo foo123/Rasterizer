@@ -189,9 +189,10 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
     // https://html.spec.whatwg.org/multipage/canvas.html#2dcontext
     var self = this, get_stroke_at, get_fill_at,
         canvas = null, shadow = null, clip_canvas = null,
+        apply_filter2, shadowblur_filter,
         canvas_reset, canvas_output, stack,
         reset, fill, set_pixel, clip_pixel,
-        stroke_pixel, fill_pixel, shadow_pixel,
+        stroke_pixel, fill_pixel, color_pixel,
         get_data, set_data,
         lineCap, lineJoin, miterLimit,
         lineWidth, lineDash, lineDashOffset,
@@ -208,20 +209,22 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
     canvas_output = function canvas_output(set_pixel) {
         if (shadow)
         {
-            shadow = apply2(null, shadow, shadowblur_filter());
+            shadow = apply_filter2(shadowblur_filter(), shadow);
             for (var idx in shadow)
             {
-                var i = shadow[idx], xy = idx.split(','),
+                var i = shadow[idx],
+                    xy = idx.split(','),
                     x = +xy[0], y = +xy[1],
                     m = clip_canvas ? (clip_canvas[idx] || 0) : 1;
                 i *= alpha*m;
-                if ((0 < i) && (0 <= x) && (x < width) && (0 <= y) && (y < height)) shadow_pixel(x, y, i);
+                if ((0 < i) && (0 <= x) && (x < width) && (0 <= y) && (y < height)) color_pixel(x, y, i, shadowColor);
             }
             shadow = null;
         }
         for (var idx in canvas)
         {
-            var i = canvas[idx], xy = /*+idx*/idx.split(','),
+            var i = canvas[idx],
+                xy = /*+idx*/idx.split(','),
                 x = /*xy % width*/+xy[0], y = /*~~(xy / width)*/+xy[1],
                 m = clip_canvas ? (clip_canvas[idx] || 0) : 1;
             i *= alpha*m;
@@ -261,8 +264,8 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         var c = 'clear' === op ? BLANK : get_fill_at(x, y), af = 3 < c.length ? c[3] : 1.0;
         set_rgba_at(x, y, c[0], c[1], c[2], af*i, op);
     };
-    shadow_pixel = function shadow_pixel(x, y, i) {
-        var c = 'clear' === op ? BLANK : shadowColor;
+    color_pixel = function color_pixel(x, y, i, color) {
+        var c = 'clear' === op ? BLANK : color;
         set_rgba_at(x, y, c[0], c[1], c[2], c[3]*i, op);
     };
     reset = function(init) {
@@ -287,17 +290,16 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         currentPath = new Path2D(transform);
         if (!init) self.clearRect(0, 0, width, height);
     };
-    function shadowblur_filter()
-    {
+    shadowblur_filter = function shadowblur_filter() {
         if (shadowBlur && !shadowBlurFilter)
         {
-            var d = (shadowBlur + (shadowBlur&1 ? 0 : 1)),
-                sigma = d >> 1, sigma2 = 2*sigma*sigma,
-                i, sum = 0;
+            var d = 2*shadowBlur + 1, d2 = d >> 1,
+                sigma2 = shadowBlur*shadowBlur/2.0,
+                i, j, sum = 0.0;
             shadowBlurFilter = new Array(d);
-            for (i=0; i<d; ++i)
+            for (i=0,j=-d2; i<d; ++i,++j)
             {
-                shadowBlurFilter[i] = stdMath.exp(-(i-sigma)*(i-sigma)/(sigma2));
+                shadowBlurFilter[i] = stdMath.exp(-j*j/sigma2);
                 sum += shadowBlurFilter[i];
             }
             for (i=0; i<d; ++i)
@@ -306,49 +308,47 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
             }
         }
         return shadowBlurFilter;
-    }
-    function apply2(output, input, filter)
-    {
+    };
+    apply_filter2 = function apply_filter2(filter, input, output) {
         if (filter)
         {
             output = output || {};
-            var d = filter.length, sigma = d >> 1,
-                x, y, xs, ys, j, s, temp = {};
+            var d = filter.length, d2 = d >> 1,
+                hd2 = height+d2, wd2 = width+d2,
+                x, y, xs, ys, i, j, s, temp = {};
             // separable
             // 1st pass
-            for (y=-d; y<height+d; ++y)
+            for (y=-d2; y<hd2; ++y)
             {
                 ys = ','+String(y);
-                for (x=-d; x<width+d; ++x)
+                for (x=-d2; x<wd2; ++x)
                 {
-                    xs = String(x);
-                    s = 0;
-                    for (j=0; j<d; ++j)
+                    s = 0.0;
+                    for (i=0,j=x-d2; i<d; ++i,++j)
                     {
-                        s += filter[j]*(input[String(x+j-sigma)+ys] || 0);
+                        s += filter[i]*(input[String(j)+ys] || 0);
                     }
-                    if (0 < s) temp[xs+ys] = s;
+                    if (0.0 < s) temp[String(x)+ys] = s;
                 }
             }
             // 2nd pass
-            for (y=-d; y<height+d; ++y)
+            for (y=-d2; y<hd2; ++y)
             {
-                ys = String(y);
-                for (x=-d; x<width+d; ++x)
+                for (x=-d2; x<wd2; ++x)
                 {
                     xs = String(x)+',';
-                    s = 0;
-                    for (j=0; j<d; ++j)
+                    s = 0.0;
+                    for (i=0,j=y-d2; i<d; ++i,++j)
                     {
-                        s += filter[j]*(temp[xs+String(y+j-sigma)] || 0);
+                        s += filter[i]*(temp[xs+String(j)] || 0);
                     }
-                    if (0 < s) output[xs+ys] = s;
+                    if (0.0 < s) output[xs+String(y)] = s;
                 }
             }
             return output;
         }
         return input;
-    }
+    };
 
     def(self, 'strokeStyle', {
         get: function() {
@@ -451,7 +451,6 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
             {
                 shadowColor = c.slice();
                 if (4 > shadowColor.length) shadowColor.push(1.0);
-                shadowBlurFilter = null;
             }
         }
     });
@@ -460,9 +459,9 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
             return shadowBlur;
         },
         set: function(sb) {
-            if ((0 <= sb) && !is_nan(sb) && is_finite(sb))
+            if (!is_nan(sb) && is_finite(sb) && (0 <= sb))
             {
-                shadowBlur = sb;
+                shadowBlur = stdMath.round(sb);
                 shadowBlurFilter = null;
             }
         }
@@ -475,7 +474,6 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
             if (!is_nan(sx) && is_finite(sx))
             {
                 shadowOffsetX = stdMath.round(sx);
-                shadowBlurFilter = null;
             }
         }
     });
@@ -487,7 +485,6 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
             if (!is_nan(sy) && is_finite(sy))
             {
                 shadowOffsetY = stdMath.round(sy);
-                shadowBlurFilter = null;
             }
         }
     });
