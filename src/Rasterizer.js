@@ -2,7 +2,7 @@
 *   Rasterizer
 *   rasterize, stroke and fill lines, rectangles, curves and paths
 *
-*   @version 1.0.0
+*   @version 1.1.0
 *   https://github.com/foo123/Rasterizer
 *
 **/
@@ -58,7 +58,7 @@ function Rasterizer(width, height, set_rgba_at, get_rgba_from)
         err('Unsupported context "'+type+'"');
     };
 }
-Rasterizer.VERSION = '1.0.0';
+Rasterizer.VERSION = '1.1.0';
 Rasterizer[PROTO] = {
     constructor: Rasterizer,
     width: null,
@@ -188,34 +188,69 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
 {
     // https://html.spec.whatwg.org/multipage/canvas.html#2dcontext
     var self = this, get_stroke_at, get_fill_at,
-        canvas = null, clip_canvas = null,
+        canvas = null, shadow = null, clip_canvas = null,
         canvas_reset, canvas_output, stack,
-        reset, fill, set_pixel,
-        stroke_pixel, fill_pixel,
+        reset, fill, set_pixel, clip_pixel,
+        stroke_pixel, fill_pixel, shadow_pixel,
         get_data, set_data,
         lineCap, lineJoin, miterLimit,
         lineWidth, lineDash, lineDashOffset,
+        shadowBlur, shadowColor, shadowBlurFilter,
+        shadowOffsetX, shadowOffsetY,
         transform, alpha, op, currentPath;
 
     canvas_reset = function canvas_reset() {
         // sparse array/hash
         canvas = {};
+        // if shadows drawn
+        if ((0 < shadowColor[3]) && (shadowBlur || shadowOffsetX || shadowOffsetY)) shadow = {};
     };
     canvas_output = function canvas_output(set_pixel) {
+        if (shadow)
+        {
+            if (shadowBlur)
+            {
+                shadow = apply2({}, shadow, shadowblur_filter());
+            }
+            for (var idx in shadow)
+            {
+                var i = shadow[idx], xy = idx.split(','),
+                    m = clip_canvas ? (clip_canvas[idx] || 0) : 1;
+                i *= alpha*m;
+                if (0 < i) shadow_pixel(+xy[0], +xy[1], i);
+            }
+            shadow = null;
+        }
         for (var idx in canvas)
         {
-            var i = canvas[idx], xy = /*+idx*/idx.split(',');
-            set_pixel(/*xy % width*/+xy[0], /*~~(xy / width)*/+xy[1], i);
+            var i = canvas[idx], xy = /*+idx*/idx.split(','),
+                m = clip_canvas ? (clip_canvas[idx] || 0) : 1;
+            i *= alpha*m;
+            if (0 < i) set_pixel(/*xy % width*/+xy[0], /*~~(xy / width)*/+xy[1], i);
         }
         canvas = null;
     };
     set_pixel = function set_pixel(x, y, i) {
-        if (0 <= x && x < width && 0 <= y && y < height && 0 < i && 0 < alpha)
+        if (!is_nan(x) && !is_nan(y) && (0 <= x) && (x < width) && (0 <= y) && (y < height) && (0 < i) && (0 < alpha))
         {
             var idx = String(x)+','+String(y)/*String(x + y*width)*/,
                 j = canvas[idx] || 0,
+                m = /*clip_canvas ? (clip_canvas[idx] || 0) :*/ 1;
+            //i *= alpha*m;
+            if (i > j)
+            {
+                canvas[idx] = i;
+                if (shadow) shadow[String(x+shadowOffsetX)+','+String(y+shadowOffsetY)] = i; // alpha channel
+            }
+        }
+    };
+    clip_pixel = function clip_pixel(x, y, i) {
+        if (!is_nan(x) && !is_nan(y) && (0 <= x) && (x < width) && (0 <= y) && (y < height) && (0 < i) && (0 < alpha))
+        {
+            var idx = String(x)+','+String(y),
+                j = canvas[idx] || 0,
                 m = clip_canvas ? (clip_canvas[idx] || 0) : 1;
-            i *= alpha*m;
+            i *= m;
             if (i > j) canvas[idx] = i;
         }
     };
@@ -226,6 +261,10 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
     fill_pixel = function fill_pixel(x, y, i) {
         var c = 'clear' === op ? BLANK : get_fill_at(x, y), af = 3 < c.length ? c[3] : 1.0;
         set_rgba_at(x, y, c[0], c[1], c[2], af*i, op);
+    };
+    shadow_pixel = function shadow_pixel(x, y, i) {
+        var c = 'clear' === op ? BLANK : shadowColor;
+        set_rgba_at(x, y, c[0], c[1], c[2], c[3]*i, op);
     };
     reset = function(init) {
         get_stroke_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]);
@@ -238,6 +277,10 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         lineWidth = 1;
         lineDash = [];
         lineDashOffset = 0;
+        shadowColor = BLANK;
+        shadowBlur = 0;
+        shadowOffsetX = 0;
+        shadowOffsetY = 0;
         transform = Matrix2D.EYE();
         alpha = 1.0;
         op = 'source-over';
@@ -245,6 +288,61 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         currentPath = new Path2D(transform);
         if (!init) self.clearRect(0, 0, width, height);
     };
+    function shadowblur_filter()
+    {
+        if (shadowBlur && !shadowBlurFilter)
+        {
+            var d = (shadowBlur + (shadowBlur&1 ? 0 : 1)),
+                sigma = d >> 1, i, sum = 0;
+            shadowBlurFilter = new Array(d);
+            for (i=0; i<d; ++i)
+            {
+                shadowBlurFilter[i] = stdMath.exp(-(i-sigma)*(i-sigma)/(2*sigma*sigma));
+                sum += shadowBlurFilter[i];
+            }
+            for (i=0; i<d; ++i)
+            {
+                shadowBlurFilter[i] /= sum;
+            }
+        }
+        return shadowBlurFilter;
+    }
+    function apply2(output, input, filter)
+    {
+        if (filter)
+        {
+            var d = filter.length, d2 = d >> 1,
+                x, y, j, s, temp = {};
+            // separable
+            // 1st pass
+            for (y=-d2; y<height+d2; ++y)
+            {
+                for (x=-d2; x<width+d2; ++x)
+                {
+                    s = 0;
+                    for (j=0; j<d; ++j)
+                    {
+                        s += filter[j]*(input[String(x+j-d2)+','+String(y)] || 0);
+                    }
+                    temp[String(x)+','+String(y)] = s;
+                }
+            }
+            // 2nd pass
+            for (y=-d2; y<height+d2; ++y)
+            {
+                for (x=-d2; x<width+d2; ++x)
+                {
+                    s = 0;
+                    for (j=0; j<d; ++j)
+                    {
+                        s += filter[j]*(temp[String(x)+','+String(y+j-d2)] || 0);
+                    }
+                    output[String(x)+','+String(y)] = s;
+                }
+            }
+        }
+        return output;
+    }
 
     def(self, 'strokeStyle', {
         get: function() {
@@ -338,6 +436,55 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
     self.setLineDash = function(ld) {
         self.lineDash = ld;
     };
+    def(self, 'shadowColor', {
+        get: function() {
+            return shadowColor.slice();
+        },
+        set: function(c) {
+            if (c && (3 <= c.length))
+            {
+                shadowColor = c.slice();
+                if (4 > shadowColor.length) shadowColor.push(1.0);
+                shadowBlurFilter = null;
+            }
+        }
+    });
+    def(self, 'shadowBlur', {
+        get: function() {
+            return shadowBlur;
+        },
+        set: function(sb) {
+            if ((0 <= sb) && !is_nan(sb) && is_finite(sb))
+            {
+                shadowBlur = sb;
+                shadowBlurFilter = null;
+            }
+        }
+    });
+    def(self, 'shadowOffsetX', {
+        get: function() {
+            return shadowOffsetX;
+        },
+        set: function(sx) {
+            if (!is_nan(sx) && is_finite(sx))
+            {
+                shadowOffsetX = stdMath.round(sx);
+                shadowBlurFilter = null;
+            }
+        }
+    });
+    def(self, 'shadowOffsetY', {
+        get: function() {
+            return shadowOffsetY;
+        },
+        set: function(sy) {
+            if (!is_nan(sy) && is_finite(sy))
+            {
+                shadowOffsetY = stdMath.round(sy);
+                shadowBlurFilter = null;
+            }
+        }
+    });
     def(self, 'globalAlpha', {
         get: function() {
             return alpha;
@@ -373,7 +520,11 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         lineDashOffset,
         transform,
         alpha,
-        op
+        op,
+        shadowColor,
+        shadowBlur,
+        shadowOffsetX,
+        shadowOffsetY
         ]);
     };
     self.restore = function() {
@@ -391,6 +542,10 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         currentPath.transform = transform = state[9];
         alpha = state[10];
         op = state[11];
+        shadowColor = state[12];
+        shadowBlur = state[13];
+        shadowOffsetX = state[14];
+        shadowOffsetY = state[15];
     };
     self.reset = function() {
         reset();
@@ -486,16 +641,16 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
                 sy = hypot(-t.m12, t.m22);
             }*/
             canvas_reset();
-            stroke_path(set_pixel, path, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, sx, sy, 0, 0, width - 1, height - 1);
+            stroke_path(set_pixel, path, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, sx, sy, 0-2*shadowBlur, 0-2*shadowBlur, width - 1+2*shadowBlur, height - 1+2*shadowBlur);
             canvas_output(stroke_pixel);
         }
     };
     fill = function(path, fillRule) {
         var lw = 0.5/*0.65*/,
-            xmin = 0,
-            ymin = 0,
-            xmax = width - 1,
-            ymax = height - 1;
+            xmin = 0-2*shadowBlur,
+            ymin = 0-2*shadowBlur,
+            xmax = width - 1+2*shadowBlur,
+            ymax = height - 1+2*shadowBlur;
         // stroke thin path outline
         stroke_path(set_pixel, path, lw, [], 0, 'butt', 'bevel', 0, 1, 1, xmin, ymin, xmax, ymax);
         // fill path interior
@@ -548,10 +703,13 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         if ('evenodd' !== fillRule) fillRule = 'nonzero';
         path = path || currentPath;
         if (path === currentPath) currentPath = new Path2D(transform);
-        canvas_reset();
+        var set_pixel_saved = set_pixel;
+        set_pixel = clip_pixel;
+        canvas = {};
         fill(path, fillRule);
         clip_canvas = canvas;
         canvas = null;
+        set_pixel = set_pixel_saved;
     };
     self.isPointInStroke = function(path, x, y) {
         if (3 > arguments.length)
@@ -790,6 +948,10 @@ RenderingContext2D[PROTO] = {
     lineDashOffset: null,
     getLineDash: null,
     setLineDash: null,
+    shadowColor: null,
+    shadowBlur: null,
+    shadowOffsetX: null,
+    shadowOffsetY: null,
     globalAlpha: null,
     globalCompositeOperation: null,
     save: null,

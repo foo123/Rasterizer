@@ -247,6 +247,38 @@ function inStroke()
     test1.appendChild(canvas1);
     test2.appendChild(canvas2);
 }
+function shadows()
+{
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+    test1.appendChild(text('Shadows'));
+    test2.appendChild(text('Shadows'));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+
+    const ctx1 = canvas1.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
+    ctx1.shadowColor = "rgba(255,0,0,1)";
+    ctx1.shadowBlur = 15;
+    ctx1.fillStyle = "rgba(0,0,255,0.7)";
+    ctx1.fillRect(20, 20, 150, 100);
+    const imData = ctx2.getImageData(0, 0, w, h);
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
+    const ctx = r.getContext("2d");
+    ctx.shadowColor = [255,0,0,1];
+    ctx.shadowBlur = 15;
+    ctx.fillStyle = [0,0,255,0.7];
+    ctx.fillRect(20, 20, 150, 100);
+    ctx2.putImageData(imData, 0, 0);
+}
 globalAlpha();
 globalComposition('source-over');
 globalComposition('destination-over');
@@ -264,6 +296,7 @@ globalComposition('difference');
 globalComposition('exclusion');
 drawImage('./cat.jpg');
 drawImage('./cat.jpg', Math.PI/8, 'overlay');
+shadows();
 inStroke();
 })();
 </script>
