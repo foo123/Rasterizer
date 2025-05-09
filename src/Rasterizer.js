@@ -829,50 +829,59 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
             //x = stdMath.round(x);
             //y = stdMath.round(y);
             // bilinear interpolation
-            var fx = stdMath.floor(x),
-                fy = stdMath.floor(y),
-                deltax = x-fx,
-                deltay = y-fy;
-            x = fx; y = fy;
-            if (0 <= x && x < w && 0 <= y && y < h)
+            if (-1 < x && x < w && -1 < y && y < h)
             {
-                var index = (x + w*y) << 2, a, b, c, d;
-                if (x+1 < w && y+1 < h)
-                {
-                    a = (1-deltax)*(1-deltay);
-                    b = deltax*(1-deltay);
-                    c = deltay*(1-deltax);
+                var deltax = stdMath.abs(x)-stdMath.floor(stdMath.abs(x)),
+                    deltay = stdMath.abs(y)-stdMath.floor(stdMath.abs(y));
+                x = stdMath.floor(x);
+                y = stdMath.floor(y);
+                if (x+1 >= w) deltax = 0;
+                if (y+1 >= h) deltay = 0;
+                var index = 0,
+                    A = [0,0,0,0],
+                    B = [0,0,0,0],
+                    C = [0,0,0,0],
+                    D = [0,0,0,0],
+                    a = (1-deltax)*(1-deltay),
+                    b = deltax*(1-deltay),
+                    c = deltay*(1-deltax),
                     d = deltax*deltay;
-                    res[0] = clamp(stdMath.round(data[index  ]*a + data[index+4]*b + data[index+w4  ]*c + data[index+4+w4]*d), 0, 255);
-                    res[1] = clamp(stdMath.round(data[index+1]*a + data[index+5]*b + data[index+w4+1]*c + data[index+5+w4]*d), 0, 255);
-                    res[2] = clamp(stdMath.round(data[index+2]*a + data[index+6]*b + data[index+w4+2]*c + data[index+6+w4]*d), 0, 255);
-                    res[3] = clamp(stdMath.round(data[index+3]*a + data[index+7]*b + data[index+w4+3]*c + data[index+7+w4]*d), 0, 255)/255;
-                }
-                else if (x+1 < w)
+                if (0 <= x && 0 <= y && x < w && y < h)
                 {
-                    a = (1-deltax);
-                    b = deltax;
-                    res[0] = clamp(stdMath.round(data[index  ]*a + data[index+4]*b), 0, 255);
-                    res[1] = clamp(stdMath.round(data[index+1]*a + data[index+5]*b), 0, 255);
-                    res[2] = clamp(stdMath.round(data[index+2]*a + data[index+6]*b), 0, 255);
-                    res[3] = clamp(stdMath.round(data[index+3]*a + data[index+7]*b), 0, 255)/255;
+                    index = (x + w*y) << 2;
+                    A[0] = data[index  ];
+                    A[1] = data[index+1];
+                    A[2] = data[index+2];
+                    A[3] = data[index+3];
                 }
-                else if (y+1 < h)
+                if (0 <= x+1 && 0 <= y && x+1 < w && y < h)
                 {
-                    a = (1-deltay);
-                    c = deltay;
-                    res[0] = clamp(stdMath.round(data[index  ]*a + data[index+w4  ]*c), 0, 255);
-                    res[1] = clamp(stdMath.round(data[index+1]*a + data[index+w4+1]*c), 0, 255);
-                    res[2] = clamp(stdMath.round(data[index+2]*a + data[index+w4+2]*c), 0, 255);
-                    res[3] = clamp(stdMath.round(data[index+3]*a + data[index+w4+3]*c), 0, 255)/255;
+                    index = (x+1 + w*y) << 2;
+                    B[0] = data[index  ];
+                    B[1] = data[index+1];
+                    B[2] = data[index+2];
+                    B[3] = data[index+3];
                 }
-                else
+                if (0 <= x && 0 <= y+1 && x < w && y+1 < h)
                 {
-                    res[0] = data[index  ];
-                    res[1] = data[index+1];
-                    res[2] = data[index+2];
-                    res[3] = data[index+3]/255;
+                    index = (x + w*(y+1)) << 2;
+                    C[0] = data[index  ];
+                    C[1] = data[index+1];
+                    C[2] = data[index+2];
+                    C[3] = data[index+3];
                 }
+                if (0 <= x+1 && 0 <= y+1 && x+1 < w && y+1 < h)
+                {
+                    index = (x+1 + w*(y+1)) << 2;
+                    D[0] = data[index  ];
+                    D[1] = data[index+1];
+                    D[2] = data[index+2];
+                    D[3] = data[index+3];
+                }
+                res[0] = clamp(stdMath.round(A[0]*a + B[0]*b + C[0]*c + D[0]*d), 0, 255);
+                res[1] = clamp(stdMath.round(A[1]*a + B[1]*b + C[1]*c + D[1]*d), 0, 255);
+                res[2] = clamp(stdMath.round(A[2]*a + B[2]*b + C[2]*c + D[2]*d), 0, 255);
+                res[3] = clamp(stdMath.round(A[3]*a + B[3]*b + C[3]*c + D[3]*d), 0, 255)/255;
                 return res;
             }
             return BLANK;
