@@ -208,30 +208,29 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
     canvas_output = function canvas_output(set_pixel) {
         if (shadow)
         {
-            if (shadowBlur)
-            {
-                shadow = apply2({}, shadow, shadowblur_filter());
-            }
+            shadow = apply2(null, shadow, shadowblur_filter());
             for (var idx in shadow)
             {
                 var i = shadow[idx], xy = idx.split(','),
+                    x = +xy[0], y = +xy[1],
                     m = clip_canvas ? (clip_canvas[idx] || 0) : 1;
                 i *= alpha*m;
-                if (0 < i) shadow_pixel(+xy[0], +xy[1], i);
+                if ((0 < i) && (0 <= x) && (x < width) && (0 <= y) && (y < height)) shadow_pixel(x, y, i);
             }
             shadow = null;
         }
         for (var idx in canvas)
         {
             var i = canvas[idx], xy = /*+idx*/idx.split(','),
+                x = /*xy % width*/+xy[0], y = /*~~(xy / width)*/+xy[1],
                 m = clip_canvas ? (clip_canvas[idx] || 0) : 1;
             i *= alpha*m;
-            if (0 < i) set_pixel(/*xy % width*/+xy[0], /*~~(xy / width)*/+xy[1], i);
+            if ((0 < i) && (0 <= x) && (x < width) && (0 <= y) && (y < height)) set_pixel(x, y, i);
         }
         canvas = null;
     };
     set_pixel = function set_pixel(x, y, i) {
-        if (!is_nan(x) && !is_nan(y) && (0 <= x) && (x < width) && (0 <= y) && (y < height) && (0 < i) && (0 < alpha))
+        if (!is_nan(x) && !is_nan(y) && (-shadowBlur <= x) && (x < width+shadowBlur) && (-shadowBlur <= y) && (y < height+shadowBlur) && (0 < i) && (0 < alpha))
         {
             var idx = String(x)+','+String(y)/*String(x + y*width)*/,
                 j = canvas[idx] || 0,
@@ -245,7 +244,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         }
     };
     clip_pixel = function clip_pixel(x, y, i) {
-        if (!is_nan(x) && !is_nan(y) && (0 <= x) && (x < width) && (0 <= y) && (y < height) && (0 < i) && (0 < alpha))
+        if (!is_nan(x) && !is_nan(y) && (-shadowBlur <= x) && (x < width+shadowBlur) && (-shadowBlur <= y) && (y < height+shadowBlur) && (0 < i) && (0 < alpha))
         {
             var idx = String(x)+','+String(y),
                 j = canvas[idx] || 0,
@@ -293,11 +292,12 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         if (shadowBlur && !shadowBlurFilter)
         {
             var d = (shadowBlur + (shadowBlur&1 ? 0 : 1)),
-                sigma = d >> 1, i, sum = 0;
+                sigma = d >> 1, sigma2 = 2*sigma*sigma,
+                i, sum = 0;
             shadowBlurFilter = new Array(d);
             for (i=0; i<d; ++i)
             {
-                shadowBlurFilter[i] = stdMath.exp(-(i-sigma)*(i-sigma)/(2*sigma*sigma));
+                shadowBlurFilter[i] = stdMath.exp(-(i-sigma)*(i-sigma)/(sigma2));
                 sum += shadowBlurFilter[i];
             }
             for (i=0; i<d; ++i)
@@ -311,37 +311,43 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
     {
         if (filter)
         {
-            var d = filter.length, d2 = d >> 1,
-                x, y, j, s, temp = {};
+            output = output || {};
+            var d = filter.length, sigma = d >> 1,
+                x, y, xs, ys, j, s, temp = {};
             // separable
             // 1st pass
-            for (y=-d2; y<height+d2; ++y)
+            for (y=-d; y<height+d; ++y)
             {
-                for (x=-d2; x<width+d2; ++x)
+                ys = ','+String(y);
+                for (x=-d; x<width+d; ++x)
                 {
+                    xs = String(x);
                     s = 0;
                     for (j=0; j<d; ++j)
                     {
-                        s += filter[j]*(input[String(x+j-d2)+','+String(y)] || 0);
+                        s += filter[j]*(input[String(x+j-sigma)+ys] || 0);
                     }
-                    temp[String(x)+','+String(y)] = s;
+                    if (0 < s) temp[xs+ys] = s;
                 }
             }
             // 2nd pass
-            for (y=-d2; y<height+d2; ++y)
+            for (y=-d; y<height+d; ++y)
             {
-                for (x=-d2; x<width+d2; ++x)
+                ys = String(y);
+                for (x=-d; x<width+d; ++x)
                 {
+                    xs = String(x)+',';
                     s = 0;
                     for (j=0; j<d; ++j)
                     {
-                        s += filter[j]*(temp[String(x)+','+String(y+j-d2)] || 0);
+                        s += filter[j]*(temp[xs+String(y+j-sigma)] || 0);
                     }
-                    output[String(x)+','+String(y)] = s;
+                    if (0 < s) output[xs+ys] = s;
                 }
             }
+            return output;
         }
-        return output;
+        return input;
     }
 
     def(self, 'strokeStyle', {
@@ -641,16 +647,16 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
                 sy = hypot(-t.m12, t.m22);
             }*/
             canvas_reset();
-            stroke_path(set_pixel, path, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, sx, sy, 0-2*shadowBlur, 0-2*shadowBlur, width - 1+2*shadowBlur, height - 1+2*shadowBlur);
+            stroke_path(set_pixel, path, lineWidth, lineDash, lineDashOffset, lineCap, lineJoin, miterLimit, sx, sy, 0-shadowBlur, 0-shadowBlur, width-1+shadowBlur, height-1+shadowBlur);
             canvas_output(stroke_pixel);
         }
     };
     fill = function(path, fillRule) {
         var lw = 0.5/*0.65*/,
-            xmin = 0-2*shadowBlur,
-            ymin = 0-2*shadowBlur,
-            xmax = width - 1+2*shadowBlur,
-            ymax = height - 1+2*shadowBlur;
+            xmin = 0-shadowBlur,
+            ymin = 0-shadowBlur,
+            xmax = width-1+shadowBlur,
+            ymax = height-1+shadowBlur;
         // stroke thin path outline
         stroke_path(set_pixel, path, lw, [], 0, 'butt', 'bevel', 0, 1, 1, xmin, ymin, xmax, ymax);
         // fill path interior
