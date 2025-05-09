@@ -207,32 +207,33 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         if ((0 < shadowColor[3]) && (shadowBlur || shadowOffsetX || shadowOffsetY)) shadow = {};
     };
     canvas_output = function canvas_output(set_pixel) {
+        var idx, i, xy, x, y;
         if (shadow)
         {
             shadow = apply_filter2(shadowblur_filter(), shadow);
-            for (var idx in shadow)
+            for (idx in shadow)
             {
-                var i = shadow[idx],
-                    xy = idx.split(','),
-                    x = +xy[0], y = +xy[1], m;
+                i = shadow[idx];
+                xy = idx.split(',');
+                x = +xy[0];
+                y = +xy[1];
                 if ((0 < i) && (0 <= x) && (x < width) && (0 <= y) && (y < height))
                 {
-                    m = clip_canvas ? (clip_canvas[idx] || 0) : 1;
-                    i *= alpha*m;
+                    i *= alpha*(clip_canvas ? (clip_canvas[idx] || 0) : 1);
                     if (0 < i) color_pixel(x, y, i, shadowColor);
                 }
             }
             shadow = null;
         }
-        for (var idx in canvas)
+        for (idx in canvas)
         {
-            var i = canvas[idx],
-                xy = /*+idx*/idx.split(','),
-                x = /*xy % width*/+xy[0], y = /*~~(xy / width)*/+xy[1], m;
+            i = canvas[idx];
+            xy = /*+idx*/idx.split(',');
+            x = /*xy % width*/+xy[0];
+            y = /*~~(xy / width)*/+xy[1];
             if ((0 < i) && (0 <= x) && (x < width) && (0 <= y) && (y < height))
             {
-                m = clip_canvas ? (clip_canvas[idx] || 0) : 1;
-                i *= alpha*m;
+                i *= alpha*(clip_canvas ? (clip_canvas[idx] || 0) : 1);
                 if (0 < i) set_pixel(x, y, i);
             }
         }
@@ -242,13 +243,11 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         if (!is_nan(x) && !is_nan(y) && (-shadowBlur <= x) && (x < width+shadowBlur) && (-shadowBlur <= y) && (y < height+shadowBlur) && (0 < i) && (0 < alpha))
         {
             var idx = String(x)+','+String(y)/*String(x + y*width)*/,
-                j = canvas[idx] || 0,
-                m = /*clip_canvas ? (clip_canvas[idx] || 0) :*/ 1;
-            //i *= alpha*m;
+                j = canvas[idx] || 0;
             if (i > j)
             {
                 canvas[idx] = i;
-                if (shadow) shadow[String(x+shadowOffsetX)+','+String(y+shadowOffsetY)] = i; // alpha channel
+                if (shadow) shadow[String(x+shadowOffsetX)+','+String(y+shadowOffsetY)] = i; // copy alpha channel
             }
         }
     };
@@ -256,14 +255,13 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         if (!is_nan(x) && !is_nan(y) && (-shadowBlur <= x) && (x < width+shadowBlur) && (-shadowBlur <= y) && (y < height+shadowBlur) && (0 < i) && (0 < alpha))
         {
             var idx = String(x)+','+String(y),
-                j = canvas[idx] || 0,
-                m = clip_canvas ? (clip_canvas[idx] || 0) : 1;
-            i *= m;
+                j = canvas[idx] || 0;
+            i *= (clip_canvas ? (clip_canvas[idx] || 0) : 1);
             if (i > j) canvas[idx] = i;
         }
     };
     color_pixel = function color_pixel(x, y, i, color) {
-        var c = 'clear' === op ? BLANK : (color.call ? color(x, y) : color), af = 3 < c.length ? c[3] : 1.0;;
+        var c = 'clear' === op ? BLANK : (color.call ? color(x, y) : color), af = 3 < c.length ? c[3] : 1.0;
         set_rgba_at(x, y, c[0], c[1], c[2], af*i, op);
     };
     stroke_pixel = function stroke_pixel(x, y, i) {
@@ -276,6 +274,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         get_stroke_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]);
         get_fill_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]);
         canvas = null;
+        shadow = null;
         clip_canvas = null;
         lineCap = 'butt';
         lineJoin = 'miter';

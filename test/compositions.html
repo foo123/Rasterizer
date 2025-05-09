@@ -279,6 +279,60 @@ function shadows()
     ctx.fillRect(20, 20, 100, 100);
     ctx2.putImageData(imData, 0, 0);
 }
+function clip()
+{
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = w;
+    canvas1.height = h;
+    canvas2.width = w;
+    canvas2.height = h;
+    canvas1.style.width = String(w)+'px';
+    canvas1.style.height = String(h)+'px';
+    canvas2.style.width = String(w)+'px';
+    canvas2.style.height = String(h)+'px';
+
+    test1.appendChild(text('Complex Clipping'));
+    test2.appendChild(text('Complex Clipping'));
+    test1.appendChild(canvas1);
+    test2.appendChild(canvas2);
+
+    const ctx1 = canvas1.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
+    let circlePath, squarePath;
+
+    // Create two clipping paths
+    ctx1.globalAlpha = 0.2;
+    ctx1.beginPath();
+    ctx1.arc(75, 75, 75, 0, 2 * Math.PI);
+    // Set the clip to the circle
+    ctx1.clip();
+    // Set the clip to be the intersection of the circle and the square
+    ctx1.beginPath();
+    ctx1.rect(10, 10, 130, 130);
+    ctx1.clip();
+    // Draw stuff that gets clipped
+    ctx1.fillStyle = "#00f";
+    ctx1.fillRect(0, 0, w, h);
+
+    const imData = ctx2.getImageData(0, 0, w, h);
+    const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
+    const ctx = r.getContext("2d");
+    // Create two clipping paths
+    ctx.globalAlpha = 0.2;
+    ctx.beginPath();
+    ctx.arc(75, 75, 75, 0, 2 * Math.PI);
+    // Set the clip to the circle
+    ctx.clip();
+    // Set the clip to be the intersection of the circle and the square
+    ctx.beginPath();
+    ctx.rect(10, 10, 130, 130);
+    ctx.clip();
+    // Draw stuff that gets clipped
+    ctx.fillStyle = [0, 0, 0xff];
+    ctx.fillRect(0, 0, w, h);
+    ctx2.putImageData(imData, 0, 0);
+}
 globalAlpha();
 globalComposition('source-over');
 globalComposition('destination-over');
@@ -297,6 +351,7 @@ globalComposition('exclusion');
 drawImage('./cat.jpg');
 drawImage('./cat.jpg', Math.PI/8, 'overlay');
 shadows();
+clip();
 inStroke();
 })();
 </script>
