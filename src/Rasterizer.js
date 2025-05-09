@@ -214,10 +214,13 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
             {
                 var i = shadow[idx],
                     xy = idx.split(','),
-                    x = +xy[0], y = +xy[1],
+                    x = +xy[0], y = +xy[1], m;
+                if ((0 < i) && (0 <= x) && (x < width) && (0 <= y) && (y < height))
+                {
                     m = clip_canvas ? (clip_canvas[idx] || 0) : 1;
-                i *= alpha*m;
-                if ((0 < i) && (0 <= x) && (x < width) && (0 <= y) && (y < height)) color_pixel(x, y, i, shadowColor);
+                    i *= alpha*m;
+                    if (0 < i) color_pixel(x, y, i, shadowColor);
+                }
             }
             shadow = null;
         }
@@ -225,10 +228,13 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         {
             var i = canvas[idx],
                 xy = /*+idx*/idx.split(','),
-                x = /*xy % width*/+xy[0], y = /*~~(xy / width)*/+xy[1],
+                x = /*xy % width*/+xy[0], y = /*~~(xy / width)*/+xy[1], m;
+            if ((0 < i) && (0 <= x) && (x < width) && (0 <= y) && (y < height))
+            {
                 m = clip_canvas ? (clip_canvas[idx] || 0) : 1;
-            i *= alpha*m;
-            if ((0 < i) && (0 <= x) && (x < width) && (0 <= y) && (y < height)) set_pixel(x, y, i);
+                i *= alpha*m;
+                if (0 < i) set_pixel(x, y, i);
+            }
         }
         canvas = null;
     };
@@ -256,17 +262,15 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
             if (i > j) canvas[idx] = i;
         }
     };
-    stroke_pixel = function stroke_pixel(x, y, i) {
-        var c = 'clear' === op ? BLANK : get_stroke_at(x, y), af = 3 < c.length ? c[3] : 1.0;
+    color_pixel = function color_pixel(x, y, i, color) {
+        var c = 'clear' === op ? BLANK : (color.call ? color(x, y) : color), af = 3 < c.length ? c[3] : 1.0;;
         set_rgba_at(x, y, c[0], c[1], c[2], af*i, op);
+    };
+    stroke_pixel = function stroke_pixel(x, y, i) {
+        color_pixel(x, y, i, get_stroke_at);
     };
     fill_pixel = function fill_pixel(x, y, i) {
-        var c = 'clear' === op ? BLANK : get_fill_at(x, y), af = 3 < c.length ? c[3] : 1.0;
-        set_rgba_at(x, y, c[0], c[1], c[2], af*i, op);
-    };
-    color_pixel = function color_pixel(x, y, i, color) {
-        var c = 'clear' === op ? BLANK : color;
-        set_rgba_at(x, y, c[0], c[1], c[2], c[3]*i, op);
+        color_pixel(x, y, i, get_fill_at);
     };
     reset = function(init) {
         get_stroke_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]);
