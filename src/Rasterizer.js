@@ -290,7 +290,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         if (shadowBlur && !shadowBlurFilter)
         {
             var d = 2*shadowBlur + 1, d2 = d >> 1,
-                sigma2 = shadowBlur*shadowBlur/2.0,
+                sigma2 = shadowBlur*shadowBlur/2,
                 i, j, sum = 0.0;
             shadowBlurFilter = new Array(d);
             for (i=0,j=-d2; i<d; ++i,++j)
@@ -312,7 +312,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
                 hd2 = height+d2, wd2 = width+d2,
                 x, y, xs, ys, i, j, s, temp;
             // separable
-            // 1st pass
+            // pass 1
             temp = {};
             for (y=-d2; y<hd2; ++y)
             {
@@ -327,7 +327,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
                     if (0.0 < s) temp[String(x)+ys] = s;
                 }
             }
-            // 2nd pass
+            // pass 2
             canvas = {};
             for (y=-d2; y<hd2; ++y)
             {
@@ -799,9 +799,10 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
     };
     self.drawImage = function(imgData, sx, sy, sw, sh, dx, dy, dw, dh) {
         if (!imgData || !imgData.data) err('Invalid image data in drawImage');
-        var W = width, H = height, w = imgData.width, h = imgData.height,
-            w4 = w << 2, data = imgData.data, argslen = arguments.length,
-            T, P, gf = get_fill_at, res
+        var W = width, H = height,
+            w = imgData.width, h = imgData.height,
+            data = imgData.data, argslen = arguments.length,
+            T, P, res, gf = get_fill_at
         ;
         if (!w || !h) err('Invalid image data in drawImage');
         sx = sx || 0;
@@ -819,8 +820,9 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
             dh = sh;
         }
         // fill rect with image taking account of active transform
-        T = transform.inv(); P = [0, 0];
-        res = [0,0,0,0];
+        T = transform.inv();
+        P = [0, 0];
+        res = [0, 0, 0, 0];
         get_fill_at = function(x, y) {
             T.transform(x, y, P);
             x = sx + (P[0]-dx)*sw/dw;
@@ -831,21 +833,26 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
             // bilinear interpolation
             if (-1 < x && x < w && -1 < y && y < h)
             {
-                var deltax = stdMath.abs(x)-stdMath.floor(stdMath.abs(x)),
-                    deltay = stdMath.abs(y)-stdMath.floor(stdMath.abs(y));
-                x = stdMath.floor(x);
-                y = stdMath.floor(y);
-                if (x+1 >= w) deltax = 0;
-                if (y+1 >= h) deltay = 0;
-                var index = 0,
+                var fx = stdMath.floor(x),
+                    fy = stdMath.floor(y),
+                    deltax = stdMath.abs(x-fx),
+                    deltay = stdMath.abs(y-fy),
+                    index = 0,
                     A = [0,0,0,0],
                     B = [0,0,0,0],
                     C = [0,0,0,0],
                     D = [0,0,0,0],
-                    a = (1-deltax)*(1-deltay),
-                    b = deltax*(1-deltay),
-                    c = deltay*(1-deltax),
-                    d = deltax*deltay;
+                    a = 0, b = 0,
+                    c = 0, d = 0;
+                x = fx; y = fy;
+                //if (0 > x) deltax = 1;
+                //if (0 > y) deltay = 1;
+                //if (x+1 >= w) deltax = 0;
+                //if (y+1 >= h) deltay = 0;
+                a = (1-deltax)*(1-deltay);
+                b = (deltax)*(1-deltay);
+                c = (deltay)*(1-deltax);
+                d = (deltax)*(deltay);
                 if (0 <= x && 0 <= y && x < w && y < h)
                 {
                     index = (x + w*y) << 2;
