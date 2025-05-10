@@ -266,15 +266,19 @@ function shadows()
 
     const ctx1 = canvas1.getContext("2d");
     const ctx2 = canvas2.getContext("2d");
-    ctx1.shadowColor = "#f00";
+    ctx1.shadowColor = "rgba(255,0,0,0.7)";
     ctx1.shadowBlur = 25;
+    ctx1.shadowOffsetX = 5;
+    ctx1.shadowOffsetY = 5;
     ctx1.fillStyle = "rgba(0,0,255,0.7)";
     ctx1.fillRect(20, 20, 100, 100);
     const imData = ctx2.getImageData(0, 0, w, h);
     const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
     const ctx = r.getContext("2d");
-    ctx.shadowColor = [0xff,0,0];
+    ctx.shadowColor = [255,0,0,0.7];
     ctx.shadowBlur = 25;
+    ctx.shadowOffsetX = 5;
+    ctx.shadowOffsetY = 5;
     ctx.fillStyle = [0,0,255,0.7];
     ctx.fillRect(20, 20, 100, 100);
     ctx2.putImageData(imData, 0, 0);

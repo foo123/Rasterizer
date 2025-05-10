@@ -188,7 +188,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
 {
     // https://html.spec.whatwg.org/multipage/canvas.html#2dcontext
     var self = this, get_stroke_at, get_fill_at,
-        canvas = null, shadow = null, clip_canvas = null,
+        canvas = null, clip_canvas = null,
         canvas_reset, canvas_output, stack,
         reset, fill, set_pixel, clip_pixel,
         color_pixel, get_data, set_data,
@@ -201,8 +201,6 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
     canvas_reset = function canvas_reset() {
         // sparse array/hash
         canvas = {};
-        // if shadows drawn
-        if ((0 < shadowColor[3]) && (shadowBlur || shadowOffsetX || shadowOffsetY)) shadow = {};
     };
     canvas_output = function canvas_output(color_at) {
         /*
@@ -225,9 +223,24 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
 
         When compositing onto the output bitmap, pixels that would fall outside of the output bitmap must be discarded.
         */
-        var idx, i, xy, x, y;
-        if (shadow)
+        var idx, i, xy, x, y, c, col = null, shadow = null;
+        // if shadows drawn
+        if ((0 < shadowColor[3]) && (shadowBlur || shadowOffsetX || shadowOffsetY))
         {
+            shadow = {}; col = {};
+            for (idx in canvas)
+            {
+                i = canvas[idx];
+                xy = idx.split(',');
+                x = +xy[0];
+                y = +xy[1];
+                col[idx] = 0 < i ? color_at(x, y) : 0;
+                if ((0 < i) && (-shadowBlur <= x) && (x < width+shadowBlur) && (-shadowBlur <= y) && (y < height+shadowBlur))
+                {
+                    c = col[idx];
+                    shadow[String(x+shadowOffsetX)+','+String(y+shadowOffsetY)] = i*(3 < c.length ? c[3] : 1); // copy alpha channel
+                }
+            }
             shadow = integral_blur(shadowBlur, shadow);
             for (idx in shadow)
             {
@@ -252,9 +265,20 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
             if ((0 < i) && (0 <= x) && (x < width) && (0 <= y) && (y < height))
             {
                 i *= alpha*(clip_canvas ? (clip_canvas[idx] || 0) : 1);
-                if (0 < i) color_pixel(x, y, i, color_at);
+                if (0 < i)
+                {
+                    if (col)
+                    {
+                        color_pixel(x, y, i, null, col[idx]);
+                    }
+                    else
+                    {
+                        color_pixel(x, y, i, color_at);
+                    }
+                }
             }
         }
+        col = null;
         canvas = null;
     };
     set_pixel = function set_pixel(x, y, i) {
@@ -265,7 +289,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
             if (i > j)
             {
                 canvas[idx] = i;
-                if (shadow) shadow[String(x+shadowOffsetX)+','+String(y+shadowOffsetY)] = i; // copy alpha channel
+                //if (shadow) shadow[String(x+shadowOffsetX)+','+String(y+shadowOffsetY)] = i; // copy alpha channel
             }
         }
     };
@@ -286,7 +310,6 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         get_stroke_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]);
         get_fill_at = Rasterizer.getRGBAFrom([0, 0, 0, 1]);
         canvas = null;
-        shadow = null;
         clip_canvas = null;
         lineCap = 'butt';
         lineJoin = 'miter';
@@ -308,7 +331,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
     integral_blur = function integral_blur(amount, canvas) {
         if (amount)
         {
-            var passes = 3, sigma = amount/2, mult = 0.9,
+            var passes = 3, sigma = amount/2,
                 d = stdMath.floor(stdMath.max(stdMath.sqrt(12*sigma*sigma/passes + 1), 3)),
                 d2 = d >> 1, d1 = d2+1, dd = d*d,
                 W = d1+width+d1, H = d1+height+d1,
@@ -342,7 +365,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
                     {
                         // O(1) average computation
                         s = ((SAT[yM+xM]||0) - (SAT[yM+xm]||0) - (SAT[ym+xM]||0) + (SAT[ym+xm]||0))/dd;
-                        if (0.0 < s) canvas[String(x)+ys] = mult*s;
+                        if (0.0 < s) canvas[String(x)+ys] = s;
                     }
                 }
             }
