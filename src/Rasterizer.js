@@ -189,13 +189,12 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
     // https://html.spec.whatwg.org/multipage/canvas.html#2dcontext
     var self = this, get_stroke_at, get_fill_at,
         canvas = null, shadow = null, clip_canvas = null,
-        apply_filter2, shadowblur,
         canvas_reset, canvas_output, stack,
         reset, fill, set_pixel, clip_pixel,
         color_pixel, get_data, set_data,
         lineCap, lineJoin, miterLimit,
         lineWidth, lineDash, lineDashOffset,
-        shadowBlur, shadowColor, shadowBlurFilter,
+        integral_blur, shadowBlur, shadowColor,
         shadowOffsetX, shadowOffsetY,
         transform, alpha, op, currentPath;
 
@@ -206,10 +205,30 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         if ((0 < shadowColor[3]) && (shadowBlur || shadowOffsetX || shadowOffsetY)) shadow = {};
     };
     canvas_output = function canvas_output(color_at) {
+        /*
+        https://html.spec.whatwg.org/multipage/canvas.html#drawing-model
+        When a shape or image is painted, user agents must follow these steps, in the order given (or act as if they do):
+
+        1. Render the shape or image onto an infinite transparent black bitmap, creating image A, as described in the previous sections. For shapes, the current fill, stroke, and line styles must be honored, and the stroke must itself also be subjected to the current transformation matrix.
+
+        2. Multiply the alpha component of every pixel in A by global alpha.
+
+        3. When the current filter is set to a value other than "none" and all the externally-defined filters it references, if any, are in documents that are currently loaded, then use image A as the input to the current filter, creating image B. If the current filter is a string parseable as a <filter-value-list>, then draw using the current filter in the same manner as SVG.
+
+        Otherwise, let B be an alias for A.
+
+        4. When shadows are drawn, render the shadow from image B, using the current shadow styles, creating image C.
+
+        5. When shadows are drawn, composite C within the clipping region over the current output bitmap using the current compositing and blending operator.
+
+        6. Composite B within the clipping region over the current output bitmap using the current compositing and blending operator.
+
+        When compositing onto the output bitmap, pixels that would fall outside of the output bitmap must be discarded.
+        */
         var idx, i, xy, x, y;
         if (shadow)
         {
-            shadow = apply_filter2(shadowblur(), shadow);
+            shadow = integral_blur(shadowBlur, shadow);
             for (idx in shadow)
             {
                 i = shadow[idx];
@@ -286,60 +305,45 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         currentPath = new Path2D(transform);
         if (!init) self.clearRect(0, 0, width, height);
     };
-    shadowblur = function shadowblur() {
-        if (shadowBlur && !shadowBlurFilter)
+    integral_blur = function integral_blur(amount, canvas) {
+        if (amount)
         {
-            var d = 2*shadowBlur + 1, d2 = d >> 1,
-                sigma2 = shadowBlur*shadowBlur/2,
-                i, j, sum = 0.0;
-            shadowBlurFilter = new Array(d);
-            for (i=0,j=-d2; i<d; ++i,++j)
+            var passes = 3, sigma = amount/2, mult = 0.9,
+                d = stdMath.floor(stdMath.max(stdMath.sqrt(12*sigma*sigma/passes + 1), 3)),
+                d2 = d >> 1, d1 = d2+1, dd = d*d,
+                W = d1+width+d1, H = d1+height+d1,
+                x, y, xs, ys, xi, yi,
+                xm, ym, xM, yM, s,
+                size = W*H, pass,
+                SAT = new Array(size);
+            // multiple passes of (a fast/integral) box blur
+            // with appropriate window d
+            // approximate gaussian blur with given sigma
+            // see central limit theorem
+            for (pass=1; pass<=passes; ++pass)
             {
-                shadowBlurFilter[i] = stdMath.exp(-j*j/sigma2);
-                sum += shadowBlurFilter[i];
-            }
-            for (i=0; i<d; ++i)
-            {
-                shadowBlurFilter[i] /= sum;
-            }
-        }
-        return shadowBlurFilter;
-    };
-    apply_filter2 = function apply_filter2(filter, canvas) {
-        if (filter)
-        {
-            var d = filter.length, d2 = d >> 1,
-                hd2 = height+d2, wd2 = width+d2,
-                x, y, xs, ys, i, j, s, temp;
-            // separable
-            // pass 1
-            temp = {};
-            for (y=-d2; y<hd2; ++y)
-            {
-                ys = ','+String(y);
-                for (x=-d2; x<wd2; ++x)
+                // O(N) computation of summed area table (SAT)
+                for (yi=0,y=-d1; yi<size; yi+=W,++y)
                 {
-                    s = 0.0;
-                    for (i=0,j=x-d2; i<d; ++i,++j)
+                    ys = ','+String(y);
+                    for (s=0,xi=0,x=-d1; xi<W; ++xi,++x)
                     {
-                        s += filter[i]*(canvas[String(j)+ys] || 0);
+                        xs = String(x);
+                        s += (canvas[xs+ys] || 0);
+                        SAT[xi+yi] = s + (yi > 0 ? SAT[xi+yi-W] : 0);
                     }
-                    if (0.0 < s) temp[String(x)+ys] = s;
                 }
-            }
-            // pass 2
-            canvas = {};
-            for (y=-d2; y<hd2; ++y)
-            {
-                for (x=-d2; x<wd2; ++x)
+                // O(N) box average computation via SAT
+                canvas = {};
+                for (y=0,ym=(d1-d2-1)*W,yM=(d1+d2)*W; y<height; ++y,ym+=W,yM+=W)
                 {
-                    xs = String(x)+',';
-                    s = 0.0;
-                    for (i=0,j=y-d2; i<d; ++i,++j)
+                    ys = ','+String(y);
+                    for (x=0,xm=d1-d2-1,xM=d1+d2; x<width; ++x,++xm,++xM)
                     {
-                        s += filter[i]*(temp[xs+String(j)] || 0);
+                        // O(1) average computation
+                        s = ((SAT[yM+xM]||0) - (SAT[yM+xm]||0) - (SAT[ym+xM]||0) + (SAT[ym+xm]||0))/dd;
+                        if (0.0 < s) canvas[String(x)+ys] = mult*s;
                     }
-                    if (0.0 < s) canvas[xs+String(y)] = s;
                 }
             }
         }
@@ -458,7 +462,6 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
             if (!is_nan(sb) && is_finite(sb) && (0 <= sb))
             {
                 shadowBlur = stdMath.round(sb);
-                shadowBlurFilter = null;
             }
         }
     });
