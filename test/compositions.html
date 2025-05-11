@@ -306,7 +306,7 @@ function clip()
     let circlePath, squarePath;
 
     // Create two clipping paths
-    ctx1.globalAlpha = 0.2;
+    ctx1.globalAlpha = 0;
     ctx1.beginPath();
     ctx1.arc(75, 75, 75, 0, 2 * Math.PI);
     // Set the clip to the circle
@@ -316,6 +316,7 @@ function clip()
     ctx1.rect(10, 10, 130, 130);
     ctx1.clip();
     // Draw stuff that gets clipped
+    ctx1.globalAlpha = 0.5;
     ctx1.fillStyle = "#00f";
     ctx1.fillRect(0, 0, w, h);
 
@@ -323,7 +324,7 @@ function clip()
     const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
     const ctx = r.getContext("2d");
     // Create two clipping paths
-    ctx.globalAlpha = 0.2;
+    ctx.globalAlpha = 0;
     ctx.beginPath();
     ctx.arc(75, 75, 75, 0, 2 * Math.PI);
     // Set the clip to the circle
@@ -333,6 +334,7 @@ function clip()
     ctx.rect(10, 10, 130, 130);
     ctx.clip();
     // Draw stuff that gets clipped
+    ctx.globalAlpha = 0.5;
     ctx.fillStyle = [0, 0, 0xff];
     ctx.fillRect(0, 0, w, h);
     ctx2.putImageData(imData, 0, 0);

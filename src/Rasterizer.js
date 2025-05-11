@@ -223,11 +223,13 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
 
         When compositing onto the output bitmap, pixels that would fall outside of the output bitmap must be discarded.
         */
-        var idx, i, xy, x, y, c, col = null, shadow = null;
+        var idx, i, xy, x, y, c,
+            col = null, shadow = null;
         // if shadows drawn
         if ((0 < shadowColor[3]) && (shadowBlur || shadowOffsetX || shadowOffsetY))
         {
-            shadow = {}; col = {};
+            col = {};
+            shadow = {};
             for (idx in canvas)
             {
                 i = canvas[idx];
@@ -255,30 +257,35 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
                 }
             }
             shadow = null;
-        }
-        for (idx in canvas)
-        {
-            i = canvas[idx];
-            xy = /*+idx*/idx.split(',');
-            x = /*xy % width*/+xy[0];
-            y = /*~~(xy / width)*/+xy[1];
-            if ((0 < i) && (0 <= x) && (x < width) && (0 <= y) && (y < height))
+            for (idx in canvas)
             {
-                i *= alpha*(clip_canvas ? (clip_canvas[idx] || 0) : 1);
-                if (0 < i)
+                i = canvas[idx];
+                xy = /*+idx*/idx.split(',');
+                x = /*xy % width*/+xy[0];
+                y = /*~~(xy / width)*/+xy[1];
+                if ((0 < i) && (0 <= x) && (x < width) && (0 <= y) && (y < height))
                 {
-                    if (col)
-                    {
-                        color_pixel(x, y, i, null, col[idx]);
-                    }
-                    else
-                    {
-                        color_pixel(x, y, i, color_at);
-                    }
+                    i *= alpha*(clip_canvas ? (clip_canvas[idx] || 0) : 1);
+                    if (0 < i) color_pixel(x, y, i, null, col[idx]);
+                }
+            }
+            col = null;
+        }
+        else
+        {
+            for (idx in canvas)
+            {
+                i = canvas[idx];
+                xy = /*+idx*/idx.split(',');
+                x = /*xy % width*/+xy[0];
+                y = /*~~(xy / width)*/+xy[1];
+                if ((0 < i) && (0 <= x) && (x < width) && (0 <= y) && (y < height))
+                {
+                    i *= alpha*(clip_canvas ? (clip_canvas[idx] || 0) : 1);
+                    if (0 < i) color_pixel(x, y, i, color_at);
                 }
             }
         }
-        col = null;
         canvas = null;
     };
     set_pixel = function set_pixel(x, y, i) {
@@ -294,7 +301,7 @@ function RenderingContext2D(width, height, set_rgba_at, get_rgba_from)
         }
     };
     clip_pixel = function clip_pixel(x, y, i) {
-        if (!is_nan(x) && !is_nan(y) && (-shadowBlur <= x) && (x < width+shadowBlur) && (-shadowBlur <= y) && (y < height+shadowBlur) && (0 < i) && (0 < alpha))
+        if (!is_nan(x) && !is_nan(y) && (-shadowBlur <= x) && (x < width+shadowBlur) && (-shadowBlur <= y) && (y < height+shadowBlur) && (0 < i))
         {
             var idx = String(x)+','+String(y),
                 j = canvas[idx] || 0;
