@@ -169,7 +169,7 @@ function drawPolyline(x1, y1, x2, y2, x3, y3, lw, ld, lc, lj, ml)
         sy2 = sign(dy2);
     //console.log(dy1*dx2 > dy2*dx1, 0 > sx1*sy2*sx2*sy1, sx1, sy1, sx2, sy2);
 }
-function drawGradientLine(x1, y1, x2, y2, lw, ld, lc)
+function drawGradientLine(x1, y1, x2, y2, lw, ld, lc, rot)
 {
     lc = lc || 'butt';//'square';//'round';
     ld = ld || [];
@@ -194,6 +194,7 @@ function drawGradientLine(x1, y1, x2, y2, lw, ld, lc)
     const grad1 = addColorStops(ctx1.createLinearGradient(20, 20, 180, 180));
     const grad2 = addColorStops(Gradient.createLinearGradient(20, 20, 180, 180));
 
+    if (rot) ctx1.rotate(rot);
     ctx1.beginPath();
     ctx1.strokeStyle = grad1;
     ctx1.lineCap = lc;
@@ -207,6 +208,7 @@ function drawGradientLine(x1, y1, x2, y2, lw, ld, lc)
     const imData = ctx2.getImageData(0, 0, w, h);
     const r = Rasterizer(w, h, Rasterizer.setRGBATo(imData));
     const ctx = r.getContext("2d");
+    if (rot) ctx.rotate(rot);
     ctx.beginPath();
     ctx.strokeStyle = grad2.getColorAt.bind(grad2);
     ctx.lineCap = lc;
@@ -898,6 +900,7 @@ drawLine(20, 20, 80, 100, 1);
 drawLine(20, 20, 80, 100, 0.5);
 drawGradientLine(6, 20, 120, 100, 20, [], 'square');
 drawGradientLine(6, 20, 120, 100, 20, [], 'round');
+//drawGradientLine(6, 20, 120, 100, 20, [], 'round', Math.PI/8);
 drawPolyline(60, 20, 20, 20, 20, 60, 20, [], 'butt', 'bevel');
 drawPolyline(10, 10, 60, 10, 60, 60, 20, [], 'butt', 'bevel');
 drawPolyline(20, 10, 20, 60, 60, 60, 20, [], 'butt', 'bevel');
